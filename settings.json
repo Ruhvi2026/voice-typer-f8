@@ -1,0 +1,8 @@
+{
+  "language": "bn-IN",
+  "sound_effects": true,
+  "floating_badge": true,
+  "silence_seconds": 1.6,
+  "max_seconds": 25,
+  "auto_paste": true
+}
