@@ -5,8 +5,8 @@ Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
 Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
 Year        : 2026
-Description : Ultra-reliable Bengali speech-to-text with native Windows RegisterHotKey
-              kernel integration (immune to idle timeouts, window switches, or drops).
+Description : Ultra-reliable speech-to-text with 125+ languages, multilingual UI,
+              Dark/Light theme switcher, and native Windows RegisterHotKey.
 """
 
 import os
@@ -28,12 +28,12 @@ from PIL import Image, ImageDraw
 import pystray
 import tkinter as tk
 
-from settings_ui import SettingsUI, load_settings, save_settings
+from settings_ui import SettingsUI, load_settings, save_settings, THEMES
+from languages_data import get_ui_text
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_PATH = os.path.join(APP_DIR, "app.log")
 
-# Setup robust logging
 logging.basicConfig(
     filename=LOG_PATH,
     level=logging.INFO,
@@ -105,8 +105,8 @@ def play_sound(sound_type):
                 winsound.Beep(1600, 120)
             elif sound_type == "error":
                 winsound.Beep(450, 180)
-        except Exception as e:
-            logging.debug(f"Sound error: {e}")
+        except Exception:
+            pass
 
     threading.Thread(target=_play, daemon=True).start()
 
@@ -125,34 +125,45 @@ ICON_RECORDING = create_icon_image("#f38ba8")
 
 
 class FloatingBadge:
-    """A floating pill badge at bottom-right corner."""
+    """A floating pill badge at bottom-right corner respecting active theme."""
     def __init__(self, parent_root):
         self.win = tk.Toplevel(parent_root)
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
         self.win.attributes("-alpha", 0.94)
-        self.win.configure(bg="#181825")
+
+        theme_key = SETTINGS.get("theme", "dark")
+        c = THEMES.get(theme_key, THEMES["dark"])
+        self.win.configure(bg=c["card_bg"])
 
         self.frame = tk.Frame(
             self.win, 
-            bg="#181825", 
+            bg=c["card_bg"], 
             padx=16, 
             pady=10, 
             highlightthickness=1, 
-            highlightbackground="#313244"
+            highlightbackground=c["border"]
         )
         self.frame.pack(fill="both", expand=True)
 
-        self.label_icon = tk.Label(self.frame, text="🎙️", font=("Segoe UI Emoji", 14), bg="#181825", fg="#cdd6f4")
+        self.label_icon = tk.Label(self.frame, text="🎙️", font=("Segoe UI Emoji", 14), bg=c["card_bg"], fg=c["text"])
         self.label_icon.pack(side="left", padx=(0, 8))
 
-        self.label_text = tk.Label(self.frame, text="", font=("Segoe UI", 10, "bold"), bg="#181825", fg="#cdd6f4")
+        self.label_text = tk.Label(self.frame, text="", font=("Segoe UI", 10, "bold"), bg=c["card_bg"], fg=c["text"])
         self.label_text.pack(side="left")
 
         self.win.withdraw()
         self._hide_timer = None
 
-    def show(self, icon, text, fg_color="#cdd6f4", auto_hide_ms=None):
+    def apply_theme(self):
+        theme_key = SETTINGS.get("theme", "dark")
+        c = THEMES.get(theme_key, THEMES["dark"])
+        self.win.configure(bg=c["card_bg"])
+        self.frame.configure(bg=c["card_bg"], highlightbackground=c["border"])
+        self.label_icon.configure(bg=c["card_bg"], fg=c["text"])
+        self.label_text.configure(bg=c["card_bg"], fg=c["text"])
+
+    def show(self, icon, text, fg_color=None, auto_hide_ms=None):
         if not SETTINGS.get("floating_badge", True):
             return
 
@@ -160,8 +171,12 @@ class FloatingBadge:
             self.win.after_cancel(self._hide_timer)
             self._hide_timer = None
 
+        self.apply_theme()
+        theme_key = SETTINGS.get("theme", "dark")
+        c = THEMES.get(theme_key, THEMES["dark"])
+
         self.label_icon.config(text=icon)
-        self.label_text.config(text=text, fg=fg_color)
+        self.label_text.config(text=text, fg=fg_color or c["text"])
 
         self.win.update_idletasks()
         w = self.frame.winfo_reqwidth() + 20
@@ -182,10 +197,6 @@ class FloatingBadge:
 
 
 class WindowsKernelHotkey(threading.Thread):
-    """
-    Native Windows RegisterHotKey thread.
-    Immune to Windows WH_KEYBOARD_LL hook drops, screen idle, or app switching.
-    """
     def __init__(self, callback):
         super().__init__(daemon=True)
         self.callback = callback
@@ -194,10 +205,8 @@ class WindowsKernelHotkey(threading.Thread):
 
     def run(self):
         self.thread_id = kernel32.GetCurrentThreadId()
-        # Register F8 hotkey
         res = user32.RegisterHotKey(None, HOTKEY_ID, MOD_NOREPEAT, VK_F8)
         if not res:
-            # Fallback without MOD_NOREPEAT if needed
             res = user32.RegisterHotKey(None, HOTKEY_ID, 0, VK_F8)
 
         logging.info(f"Native Windows RegisterHotKey F8 status: {bool(res)} (Thread: {self.thread_id})")
@@ -213,7 +222,6 @@ class WindowsKernelHotkey(threading.Thread):
             user32.DispatchMessageW(ctypes.byref(msg))
 
         user32.UnregisterHotKey(None, HOTKEY_ID)
-        logging.info("Native Windows RegisterHotKey unregistered.")
 
     def stop(self):
         self.running = False
@@ -223,7 +231,7 @@ class WindowsKernelHotkey(threading.Thread):
 
 class VoiceTyperApp:
     def __init__(self):
-        logging.info("Starting Bangla Voice Typer application...")
+        logging.info("Starting Multi-language Voice Typer...")
         self.root = tk.Tk()
         self.badge = FloatingBadge(self.root)
         self.recognizer = sr.Recognizer()
@@ -233,51 +241,44 @@ class VoiceTyperApp:
         self.lock = threading.Lock()
         self.tray_icon = None
 
-        # Settings UI
         self.settings_ui = SettingsUI(
             root=self.root, 
             on_save_callback=self.on_settings_saved,
             on_minimize_callback=self.on_minimized
         )
 
-        # Start Native Windows Hotkey Engine
         self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
         self.hotkey_engine.start()
 
-        # Start Tray Icon
         self.init_tray()
-
-        # Start Keep-Alive Heartbeat (prevents idle power saving suspension)
         self._heartbeat()
 
+    def _t(self, key):
+        return get_ui_text(SETTINGS.get("language", "bn-IN"), key)
+
     def _heartbeat(self):
-        """Runs every 2.5 seconds to keep the Tkinter message pump alive and responsive."""
         try:
-            # Check if hotkey engine thread is alive
             if not self.hotkey_engine.is_alive():
-                logging.warning("Hotkey thread died! Restarting kernel hotkey engine...")
+                logging.warning("Restarting kernel hotkey engine...")
                 self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
                 self.hotkey_engine.start()
-        except Exception as e:
-            logging.error(f"Heartbeat check error: {e}")
+        except Exception:
+            pass
         finally:
             self.root.after(2500, self._heartbeat)
 
     def on_settings_saved(self, new_settings):
         global SETTINGS
         SETTINGS = new_settings
-        mode_name = {
-            "auto_stop": "Auto-Stop (ডিফল্ট)",
-            "push_to_talk": "Push-to-Talk (চেপে রাখা)",
-            "toggle": "Toggle (ম্যানুয়াল স্টার্ট/স্টপ)"
-        }.get(SETTINGS.get("mode"), "কাস্টম")
-        self.update_badge("⚙️", f"মোড সক্রিয়: {mode_name}", "#a6e3a1", 2500)
-        logging.info(f"Settings saved: mode={SETTINGS.get('mode')}, lang={SETTINGS.get('language')}")
+        self.badge.apply_theme()
+        msg = self._t("saved_msg")
+        self.update_badge("⚙️", msg, "#a6e3a1", 2500)
 
     def on_minimized(self):
-        self.update_badge("🎙️", "Bangla Voice Typer ব্যাকগ্রাউন্ডে সক্রিয়! (F8 চাপুন)", "#89b4fa", 3000)
+        self.badge.apply_theme()
+        self.update_badge("🎙️", "Voice Typer Active (F8)", "#89b4fa", 3000)
 
-    def update_badge(self, icon, text, fg="#cdd6f4", auto_hide=None):
+    def update_badge(self, icon, text, fg=None, auto_hide=None):
         self.root.after(0, lambda: self.badge.show(icon, text, fg, auto_hide))
 
     def set_tray_icon(self, img):
@@ -288,10 +289,7 @@ class VoiceTyperApp:
                 pass
 
     def trigger_hotkey(self):
-        """Called when F8 is pressed via native Windows Kernel Hotkey."""
         mode = SETTINGS.get("mode", "auto_stop")
-        logging.info(f"F8 triggered in mode: {mode}")
-
         with self.lock:
             if mode == "auto_stop":
                 if not self.is_recording:
@@ -308,19 +306,13 @@ class VoiceTyperApp:
             elif mode == "push_to_talk":
                 if not self.is_recording:
                     threading.Thread(target=self._record_worker, daemon=True).start()
-                    # Start polling for physical key release
                     threading.Thread(target=self._watch_physical_release, daemon=True).start()
 
     def _watch_physical_release(self):
-        """Monitors physical F8 key state using GetAsyncKeyState for Push-to-Talk."""
-        # Wait small buffer (0.15s) so key press registers
         time.sleep(0.15)
         while self.is_recording and not self.stop_requested:
-            # Check if F8 is still pressed (high bit set)
             state = user32.GetAsyncKeyState(VK_F8)
             if not (state & 0x8000):
-                # Physical key was released!
-                logging.info("Push-to-Talk: F8 physical release detected.")
                 self.stop_requested = True
                 break
             time.sleep(0.03)
@@ -333,12 +325,14 @@ class VoiceTyperApp:
 
         mode = SETTINGS.get("mode", "auto_stop")
         lang = SETTINGS.get("language", "bn-IN")
-        
-        mode_hint = {
-            "auto_stop": f"মুখে বলুন... ({SETTINGS.get('silence_seconds', 3.2)} সে. থামলেই পেস্ট)",
-            "push_to_talk": "F8 চেপে রাখুন, বলা শেষে ছেড়ে দিন",
-            "toggle": "শুনছি... কথা বলা শেষে আবার F8 চাপুন"
-        }.get(mode, "মুখে বলুন")
+        sec = SETTINGS.get("silence_seconds", 3.2)
+
+        if mode == "auto_stop":
+            mode_hint = self._t("hint_auto").format(sec=sec)
+        elif mode == "push_to_talk":
+            mode_hint = self._t("hint_ptt")
+        else:
+            mode_hint = self._t("hint_toggle")
 
         self.update_badge("🎙️", mode_hint, "#89b4fa")
 
@@ -371,30 +365,28 @@ class VoiceTyperApp:
                         elif has_spoken:
                             silence_time += chunk_duration
                             if silence_time >= silence_limit:
-                                logging.info("Auto-Stop silence threshold reached.")
                                 break
                     else:
                         if rms > speech_threshold:
                             has_spoken = True
 
                     if (time.time() - start_time) >= max_duration:
-                        logging.info("Max recording duration reached.")
                         break
 
         except Exception as e:
             play_sound("error")
-            logging.error(f"Microphone input error: {e}")
-            self.update_badge("❌", f"মাইক্রোফোন ত্রুটি: {str(e)[:25]}", "#f38ba8", 3000)
+            logging.error(f"Mic error: {e}")
+            self.update_badge("❌", f"Mic: {str(e)[:25]}", "#f38ba8", 3000)
             self.set_tray_icon(ICON_IDLE)
             self.is_recording = False
             return
 
         play_sound("stop")
         self.set_tray_icon(ICON_IDLE)
-        self.update_badge("⏳", "টেক্সটে রূপান্তর হচ্ছে...", "#f9e2af")
+        self.update_badge("⏳", self._t("transcribing"), "#f9e2af")
 
         if not frames or not has_spoken:
-            self.update_badge("ℹ️", "কোনো কথা শোনা যায়নি", "#a6adc8", 2000)
+            self.update_badge("ℹ️", self._t("no_speech"), "#a6adc8", 2000)
             self.is_recording = False
             return
 
@@ -413,30 +405,27 @@ class VoiceTyperApp:
 
             text = self.recognizer.recognize_google(sr_audio, language=lang)
             text = text.strip()
-            logging.info(f"Recognition success: '{text}'")
+            logging.info(f"Transcribed ({lang}): '{text}'")
 
             if text:
                 play_sound("success")
                 preview = text if len(text) <= 25 else text[:23] + "..."
-                self.update_badge("✅", f"টাইপ হলো: {preview}", "#a6e3a1", 2500)
+                self.update_badge("✅", f"{self._t('typed')}{preview}", "#a6e3a1", 2500)
 
                 if SETTINGS.get("auto_paste", True):
                     native_paste(text + " ")
             else:
-                self.update_badge("ℹ️", "কিছু বোঝা যায়নি, আবার বলুন", "#a6adc8", 2000)
+                self.update_badge("ℹ️", self._t("unclear"), "#a6adc8", 2000)
 
         except sr.UnknownValueError:
             play_sound("error")
-            logging.warning("Google Speech: UnknownValueError (speech unclear)")
-            self.update_badge("❓", "কথাটি স্পষ্ট বোঝা যায়নি", "#f38ba8", 2200)
-        except sr.RequestError as e:
+            self.update_badge("❓", self._t("unclear"), "#f38ba8", 2200)
+        except sr.RequestError:
             play_sound("error")
-            logging.error(f"Google Speech RequestError: {e}")
-            self.update_badge("⚠️", "ইন্টারনেট কানেকশন সমস্যা", "#fab387", 3000)
+            self.update_badge("⚠️", self._t("network_err"), "#fab387", 3000)
         except Exception as e:
             play_sound("error")
-            logging.error(f"Processing error: {e}")
-            self.update_badge("❌", f"ত্রুটি: {str(e)[:25]}", "#f38ba8", 2500)
+            self.update_badge("❌", f"Error: {str(e)[:25]}", "#f38ba8", 2500)
         finally:
             self.is_recording = False
 
@@ -445,26 +434,25 @@ class VoiceTyperApp:
 
     def init_tray(self):
         def on_exit():
-            logging.info("Exiting application from system tray.")
             if self.tray_icon:
                 self.tray_icon.stop()
             self.hotkey_engine.stop()
             self.root.after(0, self.root.destroy)
 
         menu = pystray.Menu(
-            pystray.MenuItem("🎙️ Bangla Voice Typer", None, enabled=False),
+            pystray.MenuItem("🎙️ Voice Typer", None, enabled=False),
             pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⚙️ কন্ট্রোল সেন্টার ওপেন করুন...", self.open_settings_ui, default=True),
+            pystray.MenuItem(self._t("tray_open"), self.open_settings_ui, default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⌨️ হটকি: F8", None, enabled=False),
-            pystray.MenuItem("❌ বন্ধ করুন (Exit)", on_exit)
+            pystray.MenuItem("⌨️ Hotkey: F8", None, enabled=False),
+            pystray.MenuItem(self._t("tray_exit"), on_exit)
         )
 
         self.tray_icon = pystray.Icon(
             "bangla_voice_typer", 
             ICON_IDLE, 
-            "Bangla Voice Typer (F8)", 
+            "Voice Typer (F8)", 
             menu=menu
         )
         threading.Thread(target=self.tray_icon.run, daemon=True).start()

@@ -3,7 +3,7 @@
   "language": "bn-IN",
   "sound_effects": true,
   "floating_badge": true,
-  "silence_seconds": 3.4,
+  "silence_seconds": 3.0,
   "max_seconds": 45,
   "auto_paste": true,
   "hotkey": "f8"
