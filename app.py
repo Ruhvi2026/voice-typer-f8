@@ -5,10 +5,8 @@ Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
 Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
 Year        : 2026
-Description : Ultra-lightweight Bengali speech-to-text with startup control center & 3 modes:
-              1. Auto-Stop Mode (Default: press F8, talk, pause to auto-paste)
-              2. Push-to-Talk (Hold F8 to talk, release to paste)
-              3. Toggle Mode (Press F8 to start, press F8 again to stop)
+Description : Ultra-reliable Bengali speech-to-text with native Windows RegisterHotKey
+              kernel integration (immune to idle timeouts, window switches, or drops).
 """
 
 import os
@@ -18,13 +16,14 @@ import json
 import io
 import wave
 import ctypes
+import logging
 import threading
 import winsound
+from ctypes import wintypes
 import numpy as np
 import sounddevice as sd
 import speech_recognition as sr
 import pyperclip
-from pynput import keyboard
 from PIL import Image, ImageDraw
 import pystray
 import tkinter as tk
@@ -32,6 +31,15 @@ import tkinter as tk
 from settings_ui import SettingsUI, load_settings, save_settings
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_PATH = os.path.join(APP_DIR, "app.log")
+
+# Setup robust logging
+logging.basicConfig(
+    filename=LOG_PATH,
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    encoding="utf-8"
+)
 
 SETTINGS = load_settings()
 
@@ -39,9 +47,19 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = np.int16
 
+# Win32 Constants
 VK_CONTROL = 0x11
 VK_V = 0x56
 KEYEVENTF_KEYUP = 0x0002
+
+VK_F8 = 0x77
+MOD_NOREPEAT = 0x4000
+WM_HOTKEY = 0x0312
+WM_QUIT = 0x0012
+HOTKEY_ID = 1001
+
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
 
 def native_paste(text):
     """Pastes text directly at the active cursor and restores previous clipboard."""
@@ -56,11 +74,13 @@ def native_paste(text):
     try:
         pyperclip.copy(text)
         time.sleep(0.06)
-        ctypes.windll.user32.keybd_event(VK_CONTROL, 0, 0, 0)
-        ctypes.windll.user32.keybd_event(VK_V, 0, 0, 0)
-        ctypes.windll.user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
-        ctypes.windll.user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        user32.keybd_event(VK_V, 0, 0, 0)
+        user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
         time.sleep(0.35)
+    except Exception as e:
+        logging.error(f"Paste error: {e}")
     finally:
         try:
             if old_clipboard:
@@ -69,7 +89,7 @@ def native_paste(text):
             pass
 
 def play_sound(sound_type):
-    """Play pleasant audio chimes."""
+    """Play pleasant audio chimes in non-blocking thread."""
     if not SETTINGS.get("sound_effects", True):
         return
 
@@ -85,8 +105,8 @@ def play_sound(sound_type):
                 winsound.Beep(1600, 120)
             elif sound_type == "error":
                 winsound.Beep(450, 180)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Sound error: {e}")
 
     threading.Thread(target=_play, daemon=True).start()
 
@@ -161,35 +181,87 @@ class FloatingBadge:
         self.win.withdraw()
 
 
+class WindowsKernelHotkey(threading.Thread):
+    """
+    Native Windows RegisterHotKey thread.
+    Immune to Windows WH_KEYBOARD_LL hook drops, screen idle, or app switching.
+    """
+    def __init__(self, callback):
+        super().__init__(daemon=True)
+        self.callback = callback
+        self.thread_id = None
+        self.running = True
+
+    def run(self):
+        self.thread_id = kernel32.GetCurrentThreadId()
+        # Register F8 hotkey
+        res = user32.RegisterHotKey(None, HOTKEY_ID, MOD_NOREPEAT, VK_F8)
+        if not res:
+            # Fallback without MOD_NOREPEAT if needed
+            res = user32.RegisterHotKey(None, HOTKEY_ID, 0, VK_F8)
+
+        logging.info(f"Native Windows RegisterHotKey F8 status: {bool(res)} (Thread: {self.thread_id})")
+
+        msg = wintypes.MSG()
+        while self.running and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+                try:
+                    self.callback()
+                except Exception as e:
+                    logging.error(f"Error in hotkey callback: {e}")
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+
+        user32.UnregisterHotKey(None, HOTKEY_ID)
+        logging.info("Native Windows RegisterHotKey unregistered.")
+
+    def stop(self):
+        self.running = False
+        if self.thread_id:
+            user32.PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0)
+
+
 class VoiceTyperApp:
     def __init__(self):
+        logging.info("Starting Bangla Voice Typer application...")
         self.root = tk.Tk()
         self.badge = FloatingBadge(self.root)
         self.recognizer = sr.Recognizer()
         
         self.is_recording = False
         self.stop_requested = False
-        self.is_holding = False
-        self.press_start_time = 0.0
         self.lock = threading.Lock()
         self.tray_icon = None
 
-        # Create settings UI inside the main root window
+        # Settings UI
         self.settings_ui = SettingsUI(
             root=self.root, 
             on_save_callback=self.on_settings_saved,
             on_minimize_callback=self.on_minimized
         )
 
-        # Global Key Listener for F8
-        self.listener = keyboard.Listener(
-            on_press=self.on_key_press,
-            on_release=self.on_key_release
-        )
-        self.listener.start()
+        # Start Native Windows Hotkey Engine
+        self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
+        self.hotkey_engine.start()
 
         # Start Tray Icon
         self.init_tray()
+
+        # Start Keep-Alive Heartbeat (prevents idle power saving suspension)
+        self._heartbeat()
+
+    def _heartbeat(self):
+        """Runs every 2.5 seconds to keep the Tkinter message pump alive and responsive."""
+        try:
+            # Check if hotkey engine thread is alive
+            if not self.hotkey_engine.is_alive():
+                logging.warning("Hotkey thread died! Restarting kernel hotkey engine...")
+                self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
+                self.hotkey_engine.start()
+        except Exception as e:
+            logging.error(f"Heartbeat check error: {e}")
+        finally:
+            self.root.after(2500, self._heartbeat)
 
     def on_settings_saved(self, new_settings):
         global SETTINGS
@@ -200,6 +272,7 @@ class VoiceTyperApp:
             "toggle": "Toggle (ম্যানুয়াল স্টার্ট/স্টপ)"
         }.get(SETTINGS.get("mode"), "কাস্টম")
         self.update_badge("⚙️", f"মোড সক্রিয়: {mode_name}", "#a6e3a1", 2500)
+        logging.info(f"Settings saved: mode={SETTINGS.get('mode')}, lang={SETTINGS.get('language')}")
 
     def on_minimized(self):
         self.update_badge("🎙️", "Bangla Voice Typer ব্যাকগ্রাউন্ডে সক্রিয়! (F8 চাপুন)", "#89b4fa", 3000)
@@ -214,37 +287,43 @@ class VoiceTyperApp:
             except Exception:
                 pass
 
-    def on_key_press(self, key):
-        if key == keyboard.Key.f8:
-            mode = SETTINGS.get("mode", "auto_stop")
-            with self.lock:
-                if mode == "auto_stop":
-                    # Press F8 once to start; press again to cancel/finish
-                    if not self.is_recording:
-                        threading.Thread(target=self._record_worker, daemon=True).start()
-                    else:
-                        self.stop_requested = True
-                elif mode == "push_to_talk":
-                    if not self.is_holding:
-                        self.is_holding = True
-                        self.press_start_time = time.time()
-                        if not self.is_recording:
-                            threading.Thread(target=self._record_worker, daemon=True).start()
-                elif mode == "toggle":
-                    if not self.is_recording:
-                        threading.Thread(target=self._record_worker, daemon=True).start()
-                    else:
-                        self.stop_requested = True
+    def trigger_hotkey(self):
+        """Called when F8 is pressed via native Windows Kernel Hotkey."""
+        mode = SETTINGS.get("mode", "auto_stop")
+        logging.info(f"F8 triggered in mode: {mode}")
 
-    def on_key_release(self, key):
-        if key == keyboard.Key.f8:
-            mode = SETTINGS.get("mode", "auto_stop")
-            with self.lock:
-                if mode == "push_to_talk":
-                    self.is_holding = False
-                    if self.is_recording:
-                        # Give at least 0.3s buffer so accidental quick tap doesn't cut instantly
-                        self.stop_requested = True
+        with self.lock:
+            if mode == "auto_stop":
+                if not self.is_recording:
+                    threading.Thread(target=self._record_worker, daemon=True).start()
+                else:
+                    self.stop_requested = True
+
+            elif mode == "toggle":
+                if not self.is_recording:
+                    threading.Thread(target=self._record_worker, daemon=True).start()
+                else:
+                    self.stop_requested = True
+
+            elif mode == "push_to_talk":
+                if not self.is_recording:
+                    threading.Thread(target=self._record_worker, daemon=True).start()
+                    # Start polling for physical key release
+                    threading.Thread(target=self._watch_physical_release, daemon=True).start()
+
+    def _watch_physical_release(self):
+        """Monitors physical F8 key state using GetAsyncKeyState for Push-to-Talk."""
+        # Wait small buffer (0.15s) so key press registers
+        time.sleep(0.15)
+        while self.is_recording and not self.stop_requested:
+            # Check if F8 is still pressed (high bit set)
+            state = user32.GetAsyncKeyState(VK_F8)
+            if not (state & 0x8000):
+                # Physical key was released!
+                logging.info("Push-to-Talk: F8 physical release detected.")
+                self.stop_requested = True
+                break
+            time.sleep(0.03)
 
     def _record_worker(self):
         self.is_recording = True
@@ -256,7 +335,7 @@ class VoiceTyperApp:
         lang = SETTINGS.get("language", "bn-IN")
         
         mode_hint = {
-            "auto_stop": f"মুখে বলুন... (কথা শেষে {SETTINGS.get('silence_seconds', 3.2)} সে. থামুন)",
+            "auto_stop": f"মুখে বলুন... ({SETTINGS.get('silence_seconds', 3.2)} সে. থামলেই পেস্ট)",
             "push_to_talk": "F8 চেপে রাখুন, বলা শেষে ছেড়ে দিন",
             "toggle": "শুনছি... কথা বলা শেষে আবার F8 চাপুন"
         }.get(mode, "মুখে বলুন")
@@ -292,16 +371,19 @@ class VoiceTyperApp:
                         elif has_spoken:
                             silence_time += chunk_duration
                             if silence_time >= silence_limit:
+                                logging.info("Auto-Stop silence threshold reached.")
                                 break
                     else:
                         if rms > speech_threshold:
                             has_spoken = True
 
                     if (time.time() - start_time) >= max_duration:
+                        logging.info("Max recording duration reached.")
                         break
 
         except Exception as e:
             play_sound("error")
+            logging.error(f"Microphone input error: {e}")
             self.update_badge("❌", f"মাইক্রোফোন ত্রুটি: {str(e)[:25]}", "#f38ba8", 3000)
             self.set_tray_icon(ICON_IDLE)
             self.is_recording = False
@@ -331,6 +413,7 @@ class VoiceTyperApp:
 
             text = self.recognizer.recognize_google(sr_audio, language=lang)
             text = text.strip()
+            logging.info(f"Recognition success: '{text}'")
 
             if text:
                 play_sound("success")
@@ -344,12 +427,15 @@ class VoiceTyperApp:
 
         except sr.UnknownValueError:
             play_sound("error")
+            logging.warning("Google Speech: UnknownValueError (speech unclear)")
             self.update_badge("❓", "কথাটি স্পষ্ট বোঝা যায়নি", "#f38ba8", 2200)
-        except sr.RequestError:
+        except sr.RequestError as e:
             play_sound("error")
+            logging.error(f"Google Speech RequestError: {e}")
             self.update_badge("⚠️", "ইন্টারনেট কানেকশন সমস্যা", "#fab387", 3000)
         except Exception as e:
             play_sound("error")
+            logging.error(f"Processing error: {e}")
             self.update_badge("❌", f"ত্রুটি: {str(e)[:25]}", "#f38ba8", 2500)
         finally:
             self.is_recording = False
@@ -359,9 +445,10 @@ class VoiceTyperApp:
 
     def init_tray(self):
         def on_exit():
+            logging.info("Exiting application from system tray.")
             if self.tray_icon:
                 self.tray_icon.stop()
-            self.listener.stop()
+            self.hotkey_engine.stop()
             self.root.after(0, self.root.destroy)
 
         menu = pystray.Menu(
@@ -370,7 +457,7 @@ class VoiceTyperApp:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("⚙️ কন্ট্রোল সেন্টার ওপেন করুন...", self.open_settings_ui, default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⌨️ শর্টকাট: F8", None, enabled=False),
+            pystray.MenuItem("⌨️ হটকি: F8", None, enabled=False),
             pystray.MenuItem("❌ বন্ধ করুন (Exit)", on_exit)
         )
 
@@ -393,7 +480,7 @@ class VoiceTyperApp:
                     self.tray_icon.stop()
                 except Exception:
                     pass
-            self.listener.stop()
+            self.hotkey_engine.stop()
 
 if __name__ == "__main__":
     app = VoiceTyperApp()
