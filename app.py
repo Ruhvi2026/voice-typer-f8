@@ -5,10 +5,10 @@ Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
 Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
 Year        : 2026
-Description : Ultra-lightweight Bengali speech-to-text with 3 customizable recording modes:
-              1. Push-to-Talk (Hold key to record, release to paste)
-              2. Toggle Mode (Manual Start & Stop - unlimited thinking time)
-              3. Auto-Stop Mode (Configurable smart silence pause)
+Description : Ultra-lightweight Bengali speech-to-text with startup control center & 3 modes:
+              1. Auto-Stop Mode (Default: press F8, talk, pause to auto-paste)
+              2. Push-to-Talk (Hold F8 to talk, release to paste)
+              3. Toggle Mode (Press F8 to start, press F8 again to stop)
 """
 
 import os
@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw
 import pystray
 import tkinter as tk
 
-from settings_ui import SettingsUI, load_settings, save_settings, SETTINGS_PATH
+from settings_ui import SettingsUI, load_settings, save_settings
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -69,7 +69,7 @@ def native_paste(text):
             pass
 
 def play_sound(sound_type):
-    """Play non-blocking pleasant audio chimes."""
+    """Play pleasant audio chimes."""
     if not SETTINGS.get("sound_effects", True):
         return
 
@@ -91,7 +91,6 @@ def play_sound(sound_type):
     threading.Thread(target=_play, daemon=True).start()
 
 def create_icon_image(color="#38bdf8"):
-    """Draws a clean, modern microphone tray icon."""
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.ellipse([4, 4, 60, 60], fill="#1e1e2e", outline=color, width=3)
@@ -106,16 +105,16 @@ ICON_RECORDING = create_icon_image("#f38ba8")
 
 
 class FloatingBadge:
-    """A floating pill badge at bottom-right corner showing live status."""
-    def __init__(self, root):
-        self.root = root
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
-        self.root.attributes("-alpha", 0.94)
-        self.root.configure(bg="#181825")
+    """A floating pill badge at bottom-right corner."""
+    def __init__(self, parent_root):
+        self.win = tk.Toplevel(parent_root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.attributes("-alpha", 0.94)
+        self.win.configure(bg="#181825")
 
         self.frame = tk.Frame(
-            self.root, 
+            self.win, 
             bg="#181825", 
             padx=16, 
             pady=10, 
@@ -130,7 +129,7 @@ class FloatingBadge:
         self.label_text = tk.Label(self.frame, text="", font=("Segoe UI", 10, "bold"), bg="#181825", fg="#cdd6f4")
         self.label_text.pack(side="left")
 
-        self.root.withdraw()
+        self.win.withdraw()
         self._hide_timer = None
 
     def show(self, icon, text, fg_color="#cdd6f4", auto_hide_ms=None):
@@ -138,28 +137,28 @@ class FloatingBadge:
             return
 
         if self._hide_timer:
-            self.root.after_cancel(self._hide_timer)
+            self.win.after_cancel(self._hide_timer)
             self._hide_timer = None
 
         self.label_icon.config(text=icon)
         self.label_text.config(text=text, fg=fg_color)
 
-        self.root.update_idletasks()
+        self.win.update_idletasks()
         w = self.frame.winfo_reqwidth() + 20
         h = self.frame.winfo_reqheight() + 10
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
+        sw = self.win.winfo_screenwidth()
+        sh = self.win.winfo_screenheight()
 
         x = sw - w - 30
         y = sh - h - 60
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-        self.root.deiconify()
+        self.win.geometry(f"{w}x{h}+{x}+{y}")
+        self.win.deiconify()
 
         if auto_hide_ms:
-            self._hide_timer = self.root.after(auto_hide_ms, self.hide)
+            self._hide_timer = self.win.after(auto_hide_ms, self.hide)
 
     def hide(self):
-        self.root.withdraw()
+        self.win.withdraw()
 
 
 class VoiceTyperApp:
@@ -171,10 +170,18 @@ class VoiceTyperApp:
         self.is_recording = False
         self.stop_requested = False
         self.is_holding = False
+        self.press_start_time = 0.0
         self.lock = threading.Lock()
         self.tray_icon = None
 
-        # Start Global Key Listener for F8 (Press and Release)
+        # Create settings UI inside the main root window
+        self.settings_ui = SettingsUI(
+            root=self.root, 
+            on_save_callback=self.on_settings_saved,
+            on_minimize_callback=self.on_minimized
+        )
+
+        # Global Key Listener for F8
         self.listener = keyboard.Listener(
             on_press=self.on_key_press,
             on_release=self.on_key_release
@@ -184,8 +191,18 @@ class VoiceTyperApp:
         # Start Tray Icon
         self.init_tray()
 
-        # Initial launch toast with author signature
-        self.update_badge("🎙️", "Bangla Voice Typer রেডি! • by Ruhvi2026 (F8)", "#a6e3a1", 3200)
+    def on_settings_saved(self, new_settings):
+        global SETTINGS
+        SETTINGS = new_settings
+        mode_name = {
+            "auto_stop": "Auto-Stop (ডিফল্ট)",
+            "push_to_talk": "Push-to-Talk (চেপে রাখা)",
+            "toggle": "Toggle (ম্যানুয়াল স্টার্ট/স্টপ)"
+        }.get(SETTINGS.get("mode"), "কাস্টম")
+        self.update_badge("⚙️", f"মোড সক্রিয়: {mode_name}", "#a6e3a1", 2500)
+
+    def on_minimized(self):
+        self.update_badge("🎙️", "Bangla Voice Typer ব্যাকগ্রাউন্ডে সক্রিয়! (F8 চাপুন)", "#89b4fa", 3000)
 
     def update_badge(self, icon, text, fg="#cdd6f4", auto_hide=None):
         self.root.after(0, lambda: self.badge.show(icon, text, fg, auto_hide))
@@ -199,22 +216,21 @@ class VoiceTyperApp:
 
     def on_key_press(self, key):
         if key == keyboard.Key.f8:
-            mode = SETTINGS.get("mode", "push_to_talk")
+            mode = SETTINGS.get("mode", "auto_stop")
             with self.lock:
-                if mode == "push_to_talk":
-                    # While holding key, ignore repeat presses
-                    if not self.is_holding:
-                        self.is_holding = True
-                        if not self.is_recording:
-                            threading.Thread(target=self._record_worker, daemon=True).start()
-                elif mode == "toggle":
-                    # Single press starts, single press stops
+                if mode == "auto_stop":
+                    # Press F8 once to start; press again to cancel/finish
                     if not self.is_recording:
                         threading.Thread(target=self._record_worker, daemon=True).start()
                     else:
                         self.stop_requested = True
-                elif mode == "auto_stop":
-                    # Single press starts (silence stops), or press again to stop
+                elif mode == "push_to_talk":
+                    if not self.is_holding:
+                        self.is_holding = True
+                        self.press_start_time = time.time()
+                        if not self.is_recording:
+                            threading.Thread(target=self._record_worker, daemon=True).start()
+                elif mode == "toggle":
                     if not self.is_recording:
                         threading.Thread(target=self._record_worker, daemon=True).start()
                     else:
@@ -222,11 +238,12 @@ class VoiceTyperApp:
 
     def on_key_release(self, key):
         if key == keyboard.Key.f8:
-            mode = SETTINGS.get("mode", "push_to_talk")
+            mode = SETTINGS.get("mode", "auto_stop")
             with self.lock:
                 if mode == "push_to_talk":
                     self.is_holding = False
                     if self.is_recording:
+                        # Give at least 0.3s buffer so accidental quick tap doesn't cut instantly
                         self.stop_requested = True
 
     def _record_worker(self):
@@ -235,16 +252,16 @@ class VoiceTyperApp:
         self.set_tray_icon(ICON_RECORDING)
         play_sound("start")
 
-        mode = SETTINGS.get("mode", "push_to_talk")
+        mode = SETTINGS.get("mode", "auto_stop")
         lang = SETTINGS.get("language", "bn-IN")
         
         mode_hint = {
-            "push_to_talk": "F8 চেপে রাখুন, শেষে ছেড়ে দিন",
-            "toggle": "কথা শেষে আবার F8 চাপুন",
-            "auto_stop": f"কথা শেষে {SETTINGS.get('silence_seconds', 3.5)} সে. বিরতি"
+            "auto_stop": f"মুখে বলুন... (কথা শেষে {SETTINGS.get('silence_seconds', 3.2)} সে. থামুন)",
+            "push_to_talk": "F8 চেপে রাখুন, বলা শেষে ছেড়ে দিন",
+            "toggle": "শুনছি... কথা বলা শেষে আবার F8 চাপুন"
         }.get(mode, "মুখে বলুন")
 
-        self.update_badge("🎙️", f"শুনছি... ({mode_hint})", "#89b4fa")
+        self.update_badge("🎙️", mode_hint, "#89b4fa")
 
         frames = []
         chunk_duration = 0.1
@@ -252,7 +269,7 @@ class VoiceTyperApp:
         has_spoken = False
         silence_time = 0.0
         max_duration = SETTINGS.get("max_seconds", 45)
-        silence_limit = SETTINGS.get("silence_seconds", 3.5)
+        silence_limit = SETTINGS.get("silence_seconds", 3.2)
 
         try:
             with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype=DTYPE) as stream:
@@ -266,9 +283,9 @@ class VoiceTyperApp:
                     chunk, _ = stream.read(chunk_samples)
                     frames.append(chunk)
 
-                    # Silence check only in auto_stop mode!
+                    rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
+
                     if mode == "auto_stop":
-                        rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
                         if rms > speech_threshold:
                             has_spoken = True
                             silence_time = 0.0
@@ -277,8 +294,6 @@ class VoiceTyperApp:
                             if silence_time >= silence_limit:
                                 break
                     else:
-                        # In push_to_talk and toggle, we just track if speech occurred
-                        rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
                         if rms > speech_threshold:
                             has_spoken = True
 
@@ -340,35 +355,9 @@ class VoiceTyperApp:
             self.is_recording = False
 
     def open_settings_ui(self):
-        """Open modern Settings GUI window."""
-        def on_saved(new_settings):
-            global SETTINGS
-            SETTINGS = new_settings
-            mode_name = {
-                "push_to_talk": "Push-to-Talk (চেপে রাখা)",
-                "toggle": "Toggle (ম্যানুয়াল স্টার্ট/স্টপ)",
-                "auto_stop": "Auto-Stop (স্মার্ট নীরবতা)"
-            }.get(SETTINGS.get("mode"), "কাস্টম")
-            self.update_badge("⚙️", f"মোড পরিবর্তিত: {mode_name}", "#89b4fa", 2500)
-
-        self.root.after(0, lambda: SettingsUI(parent=self.root, on_save_callback=on_saved))
+        self.root.after(0, self.settings_ui.show)
 
     def init_tray(self):
-        def set_mode(m):
-            SETTINGS["mode"] = m
-            save_settings(SETTINGS)
-            mode_name = {
-                "push_to_talk": "Push-to-Talk",
-                "toggle": "Toggle Mode",
-                "auto_stop": "Auto-Stop Mode"
-            }.get(m, m)
-            self.update_badge("🎯", f"মোড সিলেক্টেড: {mode_name}", "#89b4fa", 2000)
-
-        def set_lang(code, name):
-            SETTINGS["language"] = code
-            save_settings(SETTINGS)
-            self.update_badge("🌐", f"ভাষা: {name}", "#89b4fa", 2000)
-
         def on_exit():
             if self.tray_icon:
                 self.tray_icon.stop()
@@ -379,41 +368,9 @@ class VoiceTyperApp:
             pystray.MenuItem("🎙️ Bangla Voice Typer", None, enabled=False),
             pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⚙️ সেটিংস ও কন্ট্রোল প্যানেল (UI)...", self.open_settings_ui),
+            pystray.MenuItem("⚙️ কন্ট্রোল সেন্টার ওপেন করুন...", self.open_settings_ui, default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                "🎯 মোড ১: Push-to-Talk (চেপে ধরে রাখা)", 
-                lambda: set_mode("push_to_talk"), 
-                checked=lambda item: SETTINGS.get("mode") == "push_to_talk"
-            ),
-            pystray.MenuItem(
-                "🎯 মোড ২: Toggle (একবার চেপে শুরু ও শেষ)", 
-                lambda: set_mode("toggle"), 
-                checked=lambda item: SETTINGS.get("mode") == "toggle"
-            ),
-            pystray.MenuItem(
-                "🎯 মোড ৩: Auto-Stop (নীরবতায় থামা)", 
-                lambda: set_mode("auto_stop"), 
-                checked=lambda item: SETTINGS.get("mode") == "auto_stop"
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                "🌐 বাংলা (ভারত)", 
-                lambda: set_lang("bn-IN", "বাংলা ভারত"), 
-                checked=lambda item: SETTINGS.get("language") == "bn-IN"
-            ),
-            pystray.MenuItem(
-                "🌐 বাংলা (বাংলাদেশ)", 
-                lambda: set_lang("bn-BD", "বাংলা বাংলাদেশ"), 
-                checked=lambda item: SETTINGS.get("language") == "bn-BD"
-            ),
-            pystray.MenuItem(
-                "🌐 English (India)", 
-                lambda: set_lang("en-IN", "English"), 
-                checked=lambda item: SETTINGS.get("language") == "en-IN"
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⌨️ হটকি: F8", None, enabled=False),
+            pystray.MenuItem("⌨️ শর্টকাট: F8", None, enabled=False),
             pystray.MenuItem("❌ বন্ধ করুন (Exit)", on_exit)
         )
 
