@@ -49,8 +49,8 @@ def save_settings(settings):
 
 class FastLanguagePickerModal(ctk.CTkToplevel):
     """
-    Blazing-fast, zero-lag 125+ language selector using C-backed Tk Listbox.
-    Filters in < 2 milliseconds and provides instant 60 FPS mousewheel scrolling.
+    Clean, zero-lag 125+ language selector with smooth 60 FPS mousewheel scrolling.
+    No heavy search bar — directly scroll and select any language.
     """
     def __init__(self, parent, current_lang_code, on_select_callback, theme="dark"):
         super().__init__(parent)
@@ -58,10 +58,9 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
         self.current_code = current_lang_code
         self.theme = theme
         self.all_languages = ALL_LANGUAGES
-        self.filtered_languages = list(self.all_languages)
 
-        self.title("🌐 Select Language — 125+ Languages")
-        self.geometry("520x590")
+        self.title("🌐 125+ Languages Catalog")
+        self.geometry("520x540")
         self.resizable(False, False)
         self.attributes("-topmost", True)
 
@@ -73,7 +72,7 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
             pw = parent.winfo_width()
             ph = parent.winfo_height()
             x = px + max(0, (pw - 520) // 2)
-            y = py + max(0, (ph - 590) // 2)
+            y = py + max(0, (ph - 540) // 2)
             self.geometry(f"+{x}+{y}")
         except Exception:
             pass
@@ -93,11 +92,11 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
 
         # Header
         header = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        header.pack(fill="x", padx=18, pady=(16, 6))
+        header.pack(fill="x", padx=18, pady=(16, 8))
 
         title = ctk.CTkLabel(
             header,
-            text="🌐 125+ Global Languages & Dialects",
+            text="🌐 125+ Global Languages & Locales",
             font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
             text_color=text_col
         )
@@ -105,34 +104,20 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
 
         subtitle = ctk.CTkLabel(
             header,
-            text="Instant live search: type any country, language name or code",
+            text="মাউস দিয়ে স্ক্রল করে ভাষা সিলেক্ট করুন • Scroll to select your language",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=subtext_col
         )
-        subtitle.pack(anchor="w", pady=(2, 8))
-
-        # Search Bar
-        self.search_entry = ctk.CTkEntry(
-            header,
-            placeholder_text="🔍 Type to filter (e.g. ja, zh, Bengali, Hindi, Arabic, Spanish...)",
-            font=ctk.CTkFont(family="Segoe UI", size=12),
-            height=38,
-            corner_radius=8
-        )
-        self.search_entry.pack(fill="x")
-        self.search_entry.bind("<KeyRelease>", self._on_search_typed)
-        self.search_entry.bind("<Return>", lambda e: self._on_confirm())
-        self.search_entry.bind("<Down>", lambda e: self.listbox.focus_set())
-        self.search_entry.focus_set()
+        subtitle.pack(anchor="w", pady=(2, 4))
 
         # Count & hint
         info_row = ctk.CTkFrame(self, fg_color="transparent")
-        info_row.pack(fill="x", padx=20, pady=(6, 4))
+        info_row.pack(fill="x", padx=20, pady=(0, 6))
 
         self.count_lbl = ctk.CTkLabel(
             info_row,
-            text=f"Showing all {len(self.all_languages)} languages",
-            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text=f"Total: {len(self.all_languages)} Languages available",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
             text_color=subtext_col
         )
         self.count_lbl.pack(side="left")
@@ -149,7 +134,7 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
         list_container = ctk.CTkFrame(self, corner_radius=10, fg_color=card_col, border_width=1, border_color=border_col)
         list_container.pack(fill="both", expand=True, padx=18, pady=(0, 10))
 
-        # Native C-backed Tk Listbox (150x faster than widget rendering)
+        # Native C-backed Tk Listbox (smooth 60 FPS mousewheel scrolling)
         self.listbox = tk.Listbox(
             list_container,
             font=("Segoe UI", 11),
@@ -205,44 +190,31 @@ class FastLanguagePickerModal(ctk.CTkToplevel):
         btn_select.pack(side="right")
 
         # Initial populate
-        self._populate_list(self.all_languages)
+        self._populate_list()
+        self.listbox.focus_set()
 
-    def _populate_list(self, languages):
-        self.filtered_languages = languages
+    def _populate_list(self):
         self.listbox.delete(0, tk.END)
 
         active_idx = 0
-        for idx, (name, code) in enumerate(languages):
+        for idx, (name, code) in enumerate(self.all_languages):
             tag = "  ✓ " if code == self.current_code else "    "
             self.listbox.insert(tk.END, f"{tag}{name}   [{code}]")
             if code == self.current_code:
                 active_idx = idx
 
-        self.count_lbl.configure(text=f"Showing {len(languages)} matching language(s)")
-
-        if languages:
+        if self.all_languages:
             self.listbox.selection_set(active_idx)
             self.listbox.see(active_idx)
 
-    def _on_search_typed(self, event=None):
-        query = self.search_entry.get().strip().lower()
-        if not query:
-            filtered = self.all_languages
-        else:
-            filtered = [
-                (name, code) for name, code in self.all_languages
-                if query in name.lower() or query in code.lower()
-            ]
-        self._populate_list(filtered)
-
     def _on_confirm(self):
         sel = self.listbox.curselection()
-        if sel and sel[0] < len(self.filtered_languages):
-            _, code = self.filtered_languages[sel[0]]
+        if sel and sel[0] < len(self.all_languages):
+            _, code = self.all_languages[sel[0]]
             self.on_select(code)
             self.destroy()
-        elif self.filtered_languages:
-            _, code = self.filtered_languages[0]
+        elif self.all_languages:
+            _, code = self.all_languages[0]
             self.on_select(code)
             self.destroy()
 

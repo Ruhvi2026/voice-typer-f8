@@ -61,6 +61,21 @@ HOTKEY_ID = 1001
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
+MUTEX_NAME = "Local\\VoiceTyperF8_SingleInstance_App_Mutex_2026"
+_SINGLE_INSTANCE_MUTEX = None
+
+def check_single_instance():
+    """Ensures only one instance of Voice Typer F8 runs at a time."""
+    global _SINGLE_INSTANCE_MUTEX
+    _SINGLE_INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        logging.warning("Another instance of Voice Typer F8 is already active. Focusing existing window and exiting duplicate.")
+        hwnd = user32.FindWindowW(None, "Voice Typer F8 — Desktop Speech Hub")
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+        sys.exit(0)
+
 def native_paste(text):
     """Pastes text directly at the active cursor and restores previous clipboard."""
     if not text:
@@ -189,15 +204,54 @@ class ModernFloatingPill:
         self.win.withdraw()
 
 
-class WindowsKernelHotkey(threading.Thread):
-    def __init__(self, callback):
+class HardwareKeyWatcher(threading.Thread):
+    """
+    Direct hardware keyboard poll for F8 using GetAsyncKeyState.
+    Guarantees F8 press/release detection globally across all apps,
+    even if RegisterHotKey is blocked, unhooked, or held by another app.
+    """
+    def __init__(self, on_press, on_release):
         super().__init__(daemon=True)
-        self.callback = callback
+        self.on_press = on_press
+        self.on_release = on_release
+        self.running = True
+        self.is_down = False
+
+    def run(self):
+        logging.info("HardwareKeyWatcher started for F8 (polling at 15ms)...")
+        while self.running:
+            try:
+                down = bool(user32.GetAsyncKeyState(VK_F8) & 0x8000)
+                if down and not self.is_down:
+                    self.is_down = True
+                    self.on_press("hardware_watcher")
+                elif not down and self.is_down:
+                    self.is_down = False
+                    self.on_release()
+            except Exception as e:
+                logging.error(f"HardwareKeyWatcher error: {e}")
+            time.sleep(0.015)
+
+    def stop(self):
+        self.running = False
+
+
+class WindowsKernelHotkey(threading.Thread):
+    """
+    Native Windows RegisterHotKey listener.
+    Captures F8 to prevent target app (e.g. IDE) from processing F8 keystroke.
+    """
+    def __init__(self, on_press):
+        super().__init__(daemon=True)
+        self.on_press = on_press
         self.thread_id = None
         self.running = True
 
     def run(self):
         self.thread_id = kernel32.GetCurrentThreadId()
+        # Clean up any stale registration first
+        user32.UnregisterHotKey(None, HOTKEY_ID)
+        time.sleep(0.05)
         res = user32.RegisterHotKey(None, HOTKEY_ID, MOD_NOREPEAT, VK_F8)
         if not res:
             res = user32.RegisterHotKey(None, HOTKEY_ID, 0, VK_F8)
@@ -208,7 +262,7 @@ class WindowsKernelHotkey(threading.Thread):
         while self.running and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                 try:
-                    self.callback()
+                    self.on_press("register_hotkey")
                 except Exception as e:
                     logging.error(f"Error in hotkey callback: {e}")
             user32.TranslateMessage(ctypes.byref(msg))
@@ -231,6 +285,8 @@ class VoiceTyperApp:
         
         self.is_recording = False
         self.stop_requested = False
+        self.recording_start_time = 0.0
+        self.last_trigger_time = 0.0
         self.lock = threading.Lock()
         self.tray_icon = None
 
@@ -240,8 +296,12 @@ class VoiceTyperApp:
             on_minimize_callback=self.on_minimized
         )
 
-        self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
+        # Dual engines for 100% resilient F8 detection
+        self.hotkey_engine = WindowsKernelHotkey(self.on_f8_pressed)
         self.hotkey_engine.start()
+
+        self.hardware_watcher = HardwareKeyWatcher(self.on_f8_pressed, self.on_f8_released)
+        self.hardware_watcher.start()
 
         self.init_tray()
         self._heartbeat()
@@ -253,8 +313,12 @@ class VoiceTyperApp:
         try:
             if not self.hotkey_engine.is_alive():
                 logging.warning("Restarting kernel hotkey engine...")
-                self.hotkey_engine = WindowsKernelHotkey(self.trigger_hotkey)
+                self.hotkey_engine = WindowsKernelHotkey(self.on_f8_pressed)
                 self.hotkey_engine.start()
+            if not self.hardware_watcher.is_alive():
+                logging.warning("Restarting hardware key watcher...")
+                self.hardware_watcher = HardwareKeyWatcher(self.on_f8_pressed, self.on_f8_released)
+                self.hardware_watcher.start()
         except Exception:
             pass
         finally:
@@ -279,38 +343,34 @@ class VoiceTyperApp:
             except Exception:
                 pass
 
-    def trigger_hotkey(self):
+    def on_f8_pressed(self, source="unknown"):
+        now = time.time()
+        # Debounce: prevent duplicate trigger from dual engines within 280ms
+        if now - self.last_trigger_time < 0.28:
+            return
+        self.last_trigger_time = now
+        logging.info(f"F8 Pressed [{source}] in mode: {SETTINGS.get('mode', 'auto_stop')}")
+
         mode = SETTINGS.get("mode", "auto_stop")
         with self.lock:
-            if mode == "auto_stop":
-                if not self.is_recording:
-                    threading.Thread(target=self._record_worker, daemon=True).start()
-                else:
+            if not self.is_recording:
+                threading.Thread(target=self._record_worker, daemon=True).start()
+            else:
+                # If already recording and running for at least 0.4s, pressing F8 again stops recording
+                if (now - self.recording_start_time) > 0.4:
+                    logging.info("F8 pressed during active recording -> requested stop.")
                     self.stop_requested = True
 
-            elif mode == "toggle":
-                if not self.is_recording:
-                    threading.Thread(target=self._record_worker, daemon=True).start()
-                else:
-                    self.stop_requested = True
-
-            elif mode == "push_to_talk":
-                if not self.is_recording:
-                    threading.Thread(target=self._record_worker, daemon=True).start()
-                    threading.Thread(target=self._watch_physical_release, daemon=True).start()
-
-    def _watch_physical_release(self):
-        time.sleep(0.15)
-        while self.is_recording and not self.stop_requested:
-            state = user32.GetAsyncKeyState(VK_F8)
-            if not (state & 0x8000):
-                self.stop_requested = True
-                break
-            time.sleep(0.03)
+    def on_f8_released(self):
+        mode = SETTINGS.get("mode", "auto_stop")
+        if mode == "push_to_talk" and self.is_recording:
+            logging.info("Push-to-Talk: F8 physically released -> stopping recording.")
+            self.stop_requested = True
 
     def _record_worker(self):
         self.is_recording = True
         self.stop_requested = False
+        self.recording_start_time = time.time()
         self.set_tray_icon(ICON_RECORDING)
         play_sound("start")
 
@@ -378,7 +438,7 @@ class VoiceTyperApp:
         # Amber dot for transcribing
         self.update_badge("#f59e0b", self._t("transcribing"))
 
-        if not frames or not has_spoken:
+        if not frames or len(frames) < 3:
             self.update_badge("#64748b", self._t("no_speech"), 2000)
             self.is_recording = False
             return
@@ -431,6 +491,7 @@ class VoiceTyperApp:
             if self.tray_icon:
                 self.tray_icon.stop()
             self.hotkey_engine.stop()
+            self.hardware_watcher.stop()
             self.root.after(0, self.root.destroy)
 
         menu = pystray.Menu(
@@ -463,7 +524,9 @@ class VoiceTyperApp:
                 except Exception:
                     pass
             self.hotkey_engine.stop()
+            self.hardware_watcher.stop()
 
 if __name__ == "__main__":
+    check_single_instance()
     app = VoiceTyperApp()
     app.run()
