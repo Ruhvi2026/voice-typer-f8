@@ -112,7 +112,7 @@ ALL_LANGUAGES = [
 # UI Translations
 UI_TRANSLATIONS = {
     "bn": {  # বাংলা
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "যেভাবে কথা বলতে চান সেই মোডটি সিলেক্ট করুন এবং স্টার্ট করুন",
         "sec_mode": " 🎯 ব্যবহার করার নিয়ম (৩টি মোড) ",
         "mode_auto": "⭐ মোড ১: Auto-Stop (ডিফল্ট ও সহজতম)",
@@ -154,7 +154,7 @@ UI_TRANSLATIONS = {
         "network_err": "ইন্টারনেট কানেকশন সমস্যা"
     },
     "en": {  # English
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "Select your preferred recording mode and launch",
         "sec_mode": " 🎯 Recording Modes (3 Modes) ",
         "mode_auto": "⭐ Mode 1: Auto-Stop (Default & Recommended)",
@@ -196,7 +196,7 @@ UI_TRANSLATIONS = {
         "network_err": "Internet connection error"
     },
     "hi": {  # हिन्दी
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "अपना पसंदीदा रिकॉर्डिंग मोड चुनें और शुरू करें",
         "sec_mode": " 🎯 उपयोग करने के नियम (३ मोड) ",
         "mode_auto": "⭐ मोड १: Auto-Stop (डिफ़ॉल्ट और सबसे आसान)",
@@ -228,7 +228,7 @@ UI_TRANSLATIONS = {
         "network_err": "इंटरनेट कनेक्शन समस्या"
     },
     "es": {  # Español
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "Seleccione el modo de grabación y comience",
         "sec_mode": " 🎯 Modos de Grabación (3 Modos) ",
         "mode_auto": "⭐ Modo 1: Auto-Stop (Predeterminado)",
@@ -260,7 +260,7 @@ UI_TRANSLATIONS = {
         "network_err": "Error de conexión a Internet"
     },
     "fr": {  # Français
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "Choisissez votre mode d'enregistrement et lancez",
         "sec_mode": " 🎯 Modes d'enregistrement (3 Modes) ",
         "mode_auto": "⭐ Mode 1 : Auto-Stop (Par défaut)",
@@ -292,7 +292,7 @@ UI_TRANSLATIONS = {
         "network_err": "Erreur de connexion Internet"
     },
     "de": {  # Deutsch
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "Wählen Sie Ihren Aufnahmemodus und starten Sie",
         "sec_mode": " 🎯 Aufnahmemodi (3 Modi) ",
         "mode_auto": "⭐ Modus 1: Auto-Stop (Standard)",
@@ -324,7 +324,7 @@ UI_TRANSLATIONS = {
         "network_err": "Internetverbindungsfehler"
     },
     "ar": {  # العربية
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "اختر وضع التسجيل المفضل لديك وابدأ",
         "sec_mode": " 🎯 أوضاع التسجيل (٣ أوضاع) ",
         "mode_auto": "⭐ الوضع ١: Auto-Stop (توقف تلقائي)",
@@ -356,7 +356,7 @@ UI_TRANSLATIONS = {
         "network_err": "خطأ في الاتصال بالإنترنت"
     },
     "ja": {  # 日本語 (Japanese)
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "録音モードを選択してバックグラウンドで開始",
         "sec_mode": " 🎯 録音モード (3つのモード) ",
         "mode_auto": "⭐ モード 1: Auto-Stop (自動停止 - 推奨)",
@@ -398,7 +398,7 @@ UI_TRANSLATIONS = {
         "network_err": "インターネット接続エラー"
     },
     "zh": {  # 中文 (Chinese)
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "选择您喜欢的录音模式并启动",
         "sec_mode": " 🎯 录音模式选择 (3种模式) ",
         "mode_auto": "⭐ 模式 1: Auto-Stop (自动停止 - 默认推荐)",
@@ -440,7 +440,7 @@ UI_TRANSLATIONS = {
         "network_err": "网络连接错误"
     },
     "ur": {  # اردو (Urdu)
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "اپنا پسندیدہ ریکارڈنگ موڈ منتخب کریں اور شروع کریں",
         "sec_mode": " 🎯 ریکارڈنگ کے طریقے (3 موڈز) ",
         "mode_auto": "⭐ موڈ 1: Auto-Stop (خودکار رکنا - تجویز کردہ)",
@@ -482,7 +482,7 @@ UI_TRANSLATIONS = {
         "network_err": "انٹرنیٹ کنکشن کا مسئلہ"
     },
     "ru": {  # Русский (Russian)
-        "app_title": "🎙️ Voice Typer",
+        "app_title": "🎙️ Voice Typer F8",
         "subtitle": "Выберите режим записи и запустите приложение",
         "sec_mode": " 🎯 Режимы записи (3 режима) ",
         "mode_auto": "⭐ Режим 1: Auto-Stop (По умолчанию)",

@@ -1,5 +1,5 @@
 """
-Voice Typer Pro for Antigravity IDE & Windows
+Voice Typer F8 for Antigravity IDE & Windows
 ==============================================
 Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
@@ -224,7 +224,7 @@ class WindowsKernelHotkey(threading.Thread):
 
 class VoiceTyperApp:
     def __init__(self):
-        logging.info("Starting Voice Typer Pro...")
+        logging.info("Starting Voice Typer F8...")
         self.root = ctk.CTk()
         self.badge = ModernFloatingPill(self.root)
         self.recognizer = sr.Recognizer()
@@ -267,7 +267,7 @@ class VoiceTyperApp:
         self.update_badge("#22c55e", msg, 2500)
 
     def on_minimized(self):
-        self.update_badge("#3b82f6", "Voice Typer Pro Active (F8)", 3000)
+        self.update_badge("#3b82f6", "Voice Typer F8 Active", 3000)
 
     def update_badge(self, dot_color, text, auto_hide=None):
         self.root.after(0, lambda: self.badge.show(dot_color, text, auto_hide))
@@ -434,7 +434,7 @@ class VoiceTyperApp:
             self.root.after(0, self.root.destroy)
 
         menu = pystray.Menu(
-            pystray.MenuItem("🎙️ Voice Typer Pro", None, enabled=False),
+            pystray.MenuItem("🎙️ Voice Typer F8", None, enabled=False),
             pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(self._t("tray_open"), self.open_settings_ui, default=True),
@@ -444,9 +444,9 @@ class VoiceTyperApp:
         )
 
         self.tray_icon = pystray.Icon(
-            "bangla_voice_typer", 
+            "voice_typer_f8", 
             ICON_IDLE, 
-            "Voice Typer Pro (F8)", 
+            "Voice Typer F8", 
             menu=menu
         )
         threading.Thread(target=self.tray_icon.run, daemon=True).start()

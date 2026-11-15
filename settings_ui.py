@@ -1,5 +1,5 @@
 """
-Voice Typer Pro - Professional Modern Control Center
+Voice Typer F8 - Professional Modern Control Center
 Ultra-fast, zero-lag 125+ language search with C-accelerated Listbox
 Full native i18n support across Bengali, English, Hindi, Chinese, Japanese, Urdu, etc.
 Author: Ruhvi2026 (Project Ruhvi)
@@ -262,7 +262,7 @@ class SettingsUI:
         else:
             self.win = ctk.CTk()
 
-        self.win.title("Voice Typer Pro — Desktop Speech Hub")
+        self.win.title("Voice Typer F8 — Desktop Speech Hub")
         self.win.geometry("560x710")
         self.win.resizable(False, False)
 

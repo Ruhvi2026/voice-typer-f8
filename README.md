@@ -1,4 +1,4 @@
-# 🎙️ Voice Typer Pro for Antigravity IDE & Windows
+# 🎙️ Voice Typer F8 for Antigravity IDE & Windows
 
 বিশ্বমানের প্রফেশনাল স্পিচ-টু-টেক্সট ডেস্কটপ অ্যাপ্লিকেশন—যা সরাসরি ল্যাপটপের বিল্ট-ইন মাইক্রোফোন ব্যবহার করে মুখে বলা কথা মুহূর্তের মধ্যে Antigravity IDE (বা যেকোনো উইন্ডোজ অ্যাপ)-এ স্বয়ংক্রিয়ভাবে টাইপ করে দেয়।
 
