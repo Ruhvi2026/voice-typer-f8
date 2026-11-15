@@ -1,7 +1,7 @@
 """
 Voice Typer Pro - Professional Modern Control Center
 Built with CustomTkinter for sleek macOS / Windows 11 Fluent aesthetic.
-Supports 125+ Global Languages, Dynamic i18n, and Dark/Light Modes.
+Supports 125+ Global Languages with Instant Search & Smooth Scrollable Palette.
 Author: Ruhvi2026 (Project Ruhvi)
 """
 
@@ -9,7 +9,6 @@ import os
 import json
 import tkinter as tk
 import customtkinter as ctk
-from PIL import Image
 
 from languages_data import ALL_LANGUAGES, get_ui_text
 
@@ -48,13 +47,148 @@ def save_settings(settings):
         return False
 
 
+class LanguagePickerModal(ctk.CTkToplevel):
+    """
+    A sleek, Raycast/Command-Palette style modal for browsing & searching 125+ languages.
+    Provides instant live filtering and smooth mousewheel scrolling.
+    """
+    def __init__(self, parent, current_lang_code, on_select_callback):
+        super().__init__(parent)
+        self.on_select = on_select_callback
+        self.current_code = current_lang_code
+        self.all_languages = ALL_LANGUAGES
+
+        self.title("🌐 Language Selector — 125+ Languages")
+        self.geometry("500x580")
+        self.resizable(False, False)
+        self.attributes("-topmost", True)
+
+        # Center on parent window
+        self.update_idletasks()
+        try:
+            px = parent.winfo_x()
+            py = parent.winfo_y()
+            pw = parent.winfo_width()
+            ph = parent.winfo_height()
+            x = px + max(0, (pw - 500) // 2)
+            y = py + max(0, (ph - 580) // 2)
+            self.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+
+        self._build_modal()
+        self.focus_force()
+
+    def _build_modal(self):
+        # Header container
+        header = ctk.CTkFrame(self, corner_radius=0, fg_color=("gray95", "#0f172a"))
+        header.pack(fill="x", padx=16, pady=(16, 8))
+
+        title = ctk.CTkLabel(
+            header,
+            text="🌐 Select Speech Recognition Language",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold")
+        )
+        title.pack(anchor="w", pady=(0, 2))
+
+        subtitle = ctk.CTkLabel(
+            header,
+            text="Type any language, country, or code to filter instantly",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=("gray50", "gray60")
+        )
+        subtitle.pack(anchor="w", pady=(0, 10))
+
+        # Real-time search entry bar
+        self.search_entry = ctk.CTkEntry(
+            header,
+            placeholder_text="🔍 Type to search (e.g. Bengali, Hindi, Spanish, Arabic, de, ja...)",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=38,
+            corner_radius=8
+        )
+        self.search_entry.pack(fill="x")
+        self.search_entry.bind("<KeyRelease>", self._on_search_query_changed)
+        self.search_entry.focus_set()
+
+        # Results Count Label
+        self.count_lbl = ctk.CTkLabel(
+            self,
+            text=f"Showing all {len(self.all_languages)} supported languages & dialects",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color=("gray50", "gray60")
+        )
+        self.count_lbl.pack(anchor="w", padx=20, pady=(4, 6))
+
+        # Smooth Mousewheel Scrollable Frame
+        self.scroll_frame = ctk.CTkScrollableFrame(
+            self,
+            corner_radius=10,
+            fg_color=("white", "#1e293b")
+        )
+        self.scroll_frame.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        # Populate initial list
+        self._populate_list(self.all_languages)
+
+    def _on_search_query_changed(self, event=None):
+        query = self.search_entry.get().strip().lower()
+        if not query:
+            filtered = self.all_languages
+        else:
+            filtered = [
+                (name, code) for name, code in self.all_languages
+                if query in name.lower() or query in code.lower()
+            ]
+        self._populate_list(filtered)
+
+    def _populate_list(self, languages):
+        # Clear existing rows
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+
+        self.count_lbl.configure(text=f"Showing {len(languages)} matching language(s)")
+
+        if not languages:
+            no_match = ctk.CTkLabel(
+                self.scroll_frame,
+                text="❌ No matching language found. Try another search term.",
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                text_color=("gray50", "gray60"),
+                pady=40
+            )
+            no_match.pack()
+            return
+
+        for name, code in languages:
+            is_active = (code == self.current_code)
+            
+            # Row Container
+            row_btn = ctk.CTkButton(
+                self.scroll_frame,
+                text=f"{name}  [{code}]",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold" if is_active else "normal"),
+                anchor="w",
+                fg_color=("#dcfce7", "#14532d") if is_active else "transparent",
+                text_color=("#15803d", "#86efac") if is_active else ("gray15", "#f8fafc"),
+                hover_color=("#e2e8f0", "#334155"),
+                height=36,
+                corner_radius=6,
+                command=lambda c=code: self._pick_language(c)
+            )
+            row_btn.pack(fill="x", pady=2, padx=4)
+
+    def _pick_language(self, code):
+        self.on_select(code)
+        self.destroy()
+
+
 class SettingsUI:
     def __init__(self, root=None, on_save_callback=None, on_minimize_callback=None):
         self.settings = load_settings()
         self.on_save_cb = on_save_callback
         self.on_min_cb = on_minimize_callback
 
-        # Set initial appearance mode
         initial_theme = self.settings.get("theme", "dark")
         ctk.set_appearance_mode(initial_theme)
         ctk.set_default_color_theme("blue")
@@ -75,16 +209,15 @@ class SettingsUI:
             except Exception:
                 pass
 
-        # Language catalogs
         self.all_languages = ALL_LANGUAGES
-        self.lang_map = {name: code for name, code in self.all_languages}
         self.code_to_name = {code: name for name, code in self.all_languages}
 
-        # Active settings state
+        # Active state
         self.current_mode = self.settings.get("mode", "auto_stop")
         self.current_lang = self.settings.get("language", "bn-IN")
         self.current_theme = initial_theme
         self.silence_val = self.settings.get("silence_seconds", 3.2)
+        self.picker_modal = None
 
         self._build_ui()
         self._refresh_i18n()
@@ -94,7 +227,6 @@ class SettingsUI:
         return get_ui_text(self.current_lang, key)
 
     def _build_ui(self):
-        # Main container with padding
         self.main_container = ctk.CTkFrame(self.win, corner_radius=0, fg_color=("gray95", "#0f172a"))
         self.main_container.pack(fill="both", expand=True)
 
@@ -105,7 +237,6 @@ class SettingsUI:
         header_inner = ctk.CTkFrame(header_frame, fg_color="transparent")
         header_inner.pack(fill="x", padx=16, pady=12)
 
-        # Branding
         brand_left = ctk.CTkFrame(header_inner, fg_color="transparent")
         brand_left.pack(side="left")
 
@@ -119,7 +250,6 @@ class SettingsUI:
         )
         self.title_label.pack(side="left", padx=(0, 8))
 
-        # Version Pill
         ver_pill = ctk.CTkLabel(
             title_row,
             text="v2.0 PRO",
@@ -166,7 +296,6 @@ class SettingsUI:
         )
         self.mode_header_lbl.pack(anchor="w", pady=(0, 8))
 
-        # Modern Segmented Mode Button
         self.mode_segment = ctk.CTkSegmentedButton(
             mode_inner,
             values=["⚡ Auto-Stop", "🎙️ Push-to-Talk", "🔄 Toggle"],
@@ -174,7 +303,6 @@ class SettingsUI:
             corner_radius=8,
             height=34
         )
-        # Map internal mode to label
         seg_init = {
             "auto_stop": "⚡ Auto-Stop",
             "push_to_talk": "🎙️ Push-to-Talk",
@@ -183,7 +311,7 @@ class SettingsUI:
         self.mode_segment.set(seg_init)
         self.mode_segment.pack(fill="x", pady=(0, 10))
 
-        # Interactive Mode Explanation Banner
+        # Explanation Banner
         self.mode_info_box = ctk.CTkFrame(mode_inner, corner_radius=8, fg_color=("gray92", "#0f172a"))
         self.mode_info_box.pack(fill="x", pady=(0, 6))
 
@@ -196,7 +324,7 @@ class SettingsUI:
         )
         self.mode_desc_lbl.pack(anchor="w", padx=12, pady=8)
 
-        # Silence Slider (visible in auto_stop)
+        # Silence Slider
         self.slider_container = ctk.CTkFrame(mode_inner, fg_color="transparent")
         self.slider_container.pack(fill="x", pady=(4, 0))
 
@@ -218,7 +346,7 @@ class SettingsUI:
         self.silence_slider.set(self.silence_val)
         self.silence_slider.pack(side="right")
 
-        # --- 3. Card: Speech Language (125+ Languages) ---
+        # --- 3. Card: Speech Language (125+ Languages Palette) ---
         self.lang_card = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
         self.lang_card.pack(fill="x", padx=16, pady=6)
 
@@ -233,33 +361,43 @@ class SettingsUI:
         )
         self.lang_header_lbl.pack(anchor="w", pady=(0, 6))
 
-        # Search / Filter Bar + OptionMenu
-        lang_select_row = ctk.CTkFrame(lang_inner, fg_color="transparent")
-        lang_select_row.pack(fill="x", pady=(0, 8))
+        # Active Language Display + Change Button
+        lang_display_bar = ctk.CTkFrame(lang_inner, corner_radius=8, fg_color=("gray92", "#0f172a"))
+        lang_display_bar.pack(fill="x", pady=(0, 8))
 
-        self.lang_search_entry = ctk.CTkEntry(
-            lang_select_row,
-            placeholder_text=self._t("search_placeholder"),
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            height=32,
-            width=210
+        active_lang_box = ctk.CTkFrame(lang_display_bar, fg_color="transparent")
+        active_lang_box.pack(side="left", padx=12, pady=8)
+
+        self.active_lang_tag = ctk.CTkLabel(
+            active_lang_box,
+            text=self._t("current_active"),
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color=("gray50", "gray60")
         )
-        self.lang_search_entry.pack(side="left", padx=(0, 8))
-        self.lang_search_entry.bind("<KeyRelease>", self._filter_languages)
+        self.active_lang_tag.pack(anchor="w")
 
-        current_lang_display = self.code_to_name.get(self.current_lang, self.all_languages[0][0])
-        self.lang_dropdown = ctk.CTkOptionMenu(
-            lang_select_row,
-            values=[name for name, _ in self.all_languages[:35]],
-            command=self._on_dropdown_selected,
-            height=32,
-            dynamic_resizing=False,
-            width=270
+        self.active_lang_title = ctk.CTkLabel(
+            active_lang_box,
+            text=self.code_to_name.get(self.current_lang, self.current_lang),
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=("#16a34a", "#4ade80")
         )
-        self.lang_dropdown.set(current_lang_display)
-        self.lang_dropdown.pack(side="right", fill="x", expand=True)
+        self.active_lang_title.pack(anchor="w")
 
-        # Quick Select Chips
+        # Browse Modal Trigger Button
+        self.btn_browse_lang = ctk.CTkButton(
+            lang_display_bar,
+            text=self._t("change_lang_btn"),
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color=("#2563eb", "#3b82f6"),
+            hover_color=("#1d4ed8", "#2563eb"),
+            height=34,
+            corner_radius=6,
+            command=self._open_language_modal
+        )
+        self.btn_browse_lang.pack(side="right", padx=10, pady=8)
+
+        # Quick Select Chips Row
         chips_frame = ctk.CTkFrame(lang_inner, fg_color="transparent")
         chips_frame.pack(fill="x")
 
@@ -350,7 +488,6 @@ class SettingsUI:
         footer_inner = ctk.CTkFrame(footer_frame, fg_color="transparent")
         footer_inner.pack(fill="x", padx=16, pady=12)
 
-        # Status indicator
         status_box = ctk.CTkFrame(footer_inner, fg_color="transparent")
         status_box.pack(side="left")
 
@@ -370,7 +507,6 @@ class SettingsUI:
         )
         credit_lbl.pack(anchor="w")
 
-        # Primary Launch Button
         self.btn_start = ctk.CTkButton(
             footer_inner,
             text=self._t("start_btn"),
@@ -382,6 +518,17 @@ class SettingsUI:
             command=self._start_and_minimize
         )
         self.btn_start.pack(side="right")
+
+    def _open_language_modal(self):
+        """Opens the full-featured searchable Language Picker Modal."""
+        if self.picker_modal and self.picker_modal.winfo_exists():
+            self.picker_modal.focus_force()
+            return
+        self.picker_modal = LanguagePickerModal(
+            parent=self.win,
+            current_lang_code=self.current_lang,
+            on_select_callback=self._select_language_code
+        )
 
     def _on_theme_toggle(self, selected):
         theme = "dark" if "Dark" in selected else "light"
@@ -417,26 +564,12 @@ class SettingsUI:
         self.silence_label.configure(text=f"{self._t('silence_lbl')} {self.silence_val} {self._t('sec_unit')}")
         self._apply_data()
 
-    def _on_dropdown_selected(self, selected_name):
-        code = self.lang_map.get(selected_name, "bn-IN")
-        self._select_language_code(code)
-
     def _select_language_code(self, code):
         self.current_lang = code
         display_name = self.code_to_name.get(code, code)
-        self.lang_dropdown.set(display_name)
+        self.active_lang_title.configure(text=display_name)
         self._refresh_i18n()
         self._apply_data()
-
-    def _filter_languages(self, event=None):
-        query = self.lang_search_entry.get().strip().lower()
-        if not query:
-            filtered = [name for name, _ in self.all_languages[:40]]
-        else:
-            filtered = [name for name, code in self.all_languages if query in name.lower() or query in code.lower()]
-            if not filtered:
-                filtered = [self.code_to_name.get(self.current_lang, "No match")]
-        self.lang_dropdown.configure(values=filtered[:50])
 
     def _refresh_i18n(self):
         """Dynamically re-renders all UI strings to match selected language."""
@@ -446,7 +579,9 @@ class SettingsUI:
         self._refresh_mode_description()
         self.silence_label.configure(text=f"{self._t('silence_lbl')} {self.silence_val} {self._t('sec_unit')}")
         self.lang_header_lbl.configure(text=self._t("sec_pref"))
-        self.lang_search_entry.configure(placeholder_text=self._t("search_placeholder"))
+        self.active_lang_tag.configure(text=self._t("current_active"))
+        self.active_lang_title.configure(text=self.code_to_name.get(self.current_lang, self.current_lang))
+        self.btn_browse_lang.configure(text=self._t("change_lang_btn"))
         self.quick_lbl.configure(text=self._t("quick_label"))
         self.sound_switch.configure(text=self._t("sound_cb"))
         self.badge_switch.configure(text=self._t("badge_cb"))
@@ -492,7 +627,7 @@ class SettingsUI:
             "toggle": "🔄 Toggle"
         }.get(self.current_mode, "⚡ Auto-Stop")
         self.mode_segment.set(seg_init)
-        self.lang_dropdown.set(self.code_to_name.get(self.current_lang, self.all_languages[0][0]))
+        self.active_lang_title.configure(text=self.code_to_name.get(self.current_lang, self.current_lang))
         self.silence_slider.set(self.silence_val)
         self._refresh_i18n()
         self.win.deiconify()
