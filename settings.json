@@ -1,8 +1,10 @@
 {
+  "mode": "push_to_talk",
   "language": "bn-IN",
   "sound_effects": true,
   "floating_badge": true,
-  "silence_seconds": 1.6,
-  "max_seconds": 25,
-  "auto_paste": true
+  "silence_seconds": 3.5,
+  "max_seconds": 45,
+  "auto_paste": true,
+  "hotkey": "f8"
 }
