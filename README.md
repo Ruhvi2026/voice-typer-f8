@@ -49,3 +49,12 @@
 * `run.bat`: কোনো সমস্যা দেখতে চাইলে টার্মিনাল সহ চালু করার স্ক্রিপ্ট।
 * `test_voice.py`: টার্মিনালে ৫ সেকেন্ডের জন্য ল্যাপটপের মাইক ও গুগলের বাংলা রিকগনিশন টেস্ট করার টুল।
 * `settings.json`: কনফিগারেশন ফাইল।
+
+---
+
+## ✍️ Author & Signature
+
+**Developed with ❤️ by [Ruhvi2026](https://github.com/Ruhvi2026)**  
+*Project Ruhvi • 2026*  
+*Repository: [bangla-voice-typer](https://github.com/Ruhvi2026/bangla-voice-typer)*
+

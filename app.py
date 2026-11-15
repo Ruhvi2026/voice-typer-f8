@@ -1,8 +1,12 @@
 """
 Bangla Voice Typer for Antigravity IDE & Windows
 ================================================
-Ultra-lightweight, high-accuracy Bengali speech-to-text with auto-paste.
-Designed for 4GB RAM systems with near-zero resource consumption.
+Author      : Ruhvi2026 (ruhvi.main@gmail.com)
+Project     : Project Ruhvi (https://github.com/Ruhvi2026)
+Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
+Year        : 2026
+Description : Ultra-lightweight, high-accuracy Bengali speech-to-text with auto-paste.
+              Designed for 4GB RAM systems with near-zero resource consumption.
 """
 
 import os
@@ -208,7 +212,7 @@ class VoiceTyperApp:
         self.init_tray()
 
         # Initial launch toast
-        self.update_badge("🎙️", "Bangla Voice Typer রেডি! (F8 চাপুন)", "#a6e3a1", 3000)
+        self.update_badge("🎙️", "Bangla Voice Typer রেডি! • by Ruhvi2026 (F8)", "#a6e3a1", 3200)
 
     def update_badge(self, icon, text, fg="#cdd6f4", auto_hide=None):
         self.root.after(0, lambda: self.badge.show(icon, text, fg, auto_hide))
@@ -349,6 +353,7 @@ class VoiceTyperApp:
 
         menu = pystray.Menu(
             pystray.MenuItem("🎙️ Bangla Voice Typer", None, enabled=False),
+            pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "🌐 ভাষা: বাংলা (ভারত - bn-IN)", 

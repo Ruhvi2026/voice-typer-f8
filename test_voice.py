@@ -1,5 +1,6 @@
 """
 Quick 5-Second Voice Test Script
+Author: Ruhvi2026 (Project Ruhvi)
 Run this to test your laptop's mic and Bengali speech recognition directly in terminal.
 """
 import io
