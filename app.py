@@ -1,12 +1,12 @@
 """
-Bangla Voice Typer for Antigravity IDE & Windows
-================================================
+Voice Typer Pro for Antigravity IDE & Windows
+==============================================
 Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
 Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
 Year        : 2026
-Description : Ultra-reliable speech-to-text with 125+ languages, multilingual UI,
-              Dark/Light theme switcher, and native Windows RegisterHotKey.
+Description : World-class Desktop Speech-to-Text with CustomTkinter UI,
+              125+ languages, dynamic i18n, Dark/Light modes, and native Windows Kernel Hotkey.
 """
 
 import os
@@ -24,11 +24,11 @@ import numpy as np
 import sounddevice as sd
 import speech_recognition as sr
 import pyperclip
+import customtkinter as ctk
 from PIL import Image, ImageDraw
 import pystray
-import tkinter as tk
 
-from settings_ui import SettingsUI, load_settings, save_settings, THEMES
+from settings_ui import SettingsUI, load_settings, save_settings
 from languages_data import get_ui_text
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -89,7 +89,7 @@ def native_paste(text):
             pass
 
 def play_sound(sound_type):
-    """Play pleasant audio chimes in non-blocking thread."""
+    """Play non-blocking pleasant audio chimes."""
     if not SETTINGS.get("sound_effects", True):
         return
 
@@ -105,8 +105,8 @@ def play_sound(sound_type):
                 winsound.Beep(1600, 120)
             elif sound_type == "error":
                 winsound.Beep(450, 180)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Sound error: {e}")
 
     threading.Thread(target=_play, daemon=True).start()
 
@@ -124,46 +124,43 @@ ICON_IDLE = create_icon_image("#38bdf8")
 ICON_RECORDING = create_icon_image("#f38ba8")
 
 
-class FloatingBadge:
-    """A floating pill badge at bottom-right corner respecting active theme."""
+class ModernFloatingPill:
+    """A sleek floating pill badge with glowing indicator dot."""
     def __init__(self, parent_root):
-        self.win = tk.Toplevel(parent_root)
+        self.win = ctk.CTkToplevel(parent_root)
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
-        self.win.attributes("-alpha", 0.94)
+        self.win.attributes("-alpha", 0.95)
 
-        theme_key = SETTINGS.get("theme", "dark")
-        c = THEMES.get(theme_key, THEMES["dark"])
-        self.win.configure(bg=c["card_bg"])
-
-        self.frame = tk.Frame(
-            self.win, 
-            bg=c["card_bg"], 
-            padx=16, 
-            pady=10, 
-            highlightthickness=1, 
-            highlightbackground=c["border"]
+        self.card = ctk.CTkFrame(
+            self.win,
+            corner_radius=16,
+            border_width=1,
+            border_color=("#cbd5e1", "#334155"),
+            fg_color=("white", "#1e293b")
         )
-        self.frame.pack(fill="both", expand=True)
+        self.card.pack(fill="both", expand=True, padx=2, pady=2)
 
-        self.label_icon = tk.Label(self.frame, text="🎙️", font=("Segoe UI Emoji", 14), bg=c["card_bg"], fg=c["text"])
-        self.label_icon.pack(side="left", padx=(0, 8))
+        self.dot_label = ctk.CTkLabel(
+            self.card,
+            text="●",
+            font=ctk.CTkFont(family="Segoe UI", size=14),
+            text_color="#ef4444"
+        )
+        self.dot_label.pack(side="left", padx=(14, 6), pady=8)
 
-        self.label_text = tk.Label(self.frame, text="", font=("Segoe UI", 10, "bold"), bg=c["card_bg"], fg=c["text"])
-        self.label_text.pack(side="left")
+        self.text_label = ctk.CTkLabel(
+            self.card,
+            text="",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=("gray10", "gray95")
+        )
+        self.text_label.pack(side="left", padx=(0, 16), pady=8)
 
         self.win.withdraw()
         self._hide_timer = None
 
-    def apply_theme(self):
-        theme_key = SETTINGS.get("theme", "dark")
-        c = THEMES.get(theme_key, THEMES["dark"])
-        self.win.configure(bg=c["card_bg"])
-        self.frame.configure(bg=c["card_bg"], highlightbackground=c["border"])
-        self.label_icon.configure(bg=c["card_bg"], fg=c["text"])
-        self.label_text.configure(bg=c["card_bg"], fg=c["text"])
-
-    def show(self, icon, text, fg_color=None, auto_hide_ms=None):
+    def show(self, dot_color, text, auto_hide_ms=None):
         if not SETTINGS.get("floating_badge", True):
             return
 
@@ -171,21 +168,17 @@ class FloatingBadge:
             self.win.after_cancel(self._hide_timer)
             self._hide_timer = None
 
-        self.apply_theme()
-        theme_key = SETTINGS.get("theme", "dark")
-        c = THEMES.get(theme_key, THEMES["dark"])
-
-        self.label_icon.config(text=icon)
-        self.label_text.config(text=text, fg=fg_color or c["text"])
+        self.dot_label.configure(text_color=dot_color)
+        self.text_label.configure(text=text)
 
         self.win.update_idletasks()
-        w = self.frame.winfo_reqwidth() + 20
-        h = self.frame.winfo_reqheight() + 10
+        w = self.card.winfo_reqwidth() + 24
+        h = self.card.winfo_reqheight() + 10
         sw = self.win.winfo_screenwidth()
         sh = self.win.winfo_screenheight()
 
-        x = sw - w - 30
-        y = sh - h - 60
+        x = sw - w - 24
+        y = sh - h - 55
         self.win.geometry(f"{w}x{h}+{x}+{y}")
         self.win.deiconify()
 
@@ -231,9 +224,9 @@ class WindowsKernelHotkey(threading.Thread):
 
 class VoiceTyperApp:
     def __init__(self):
-        logging.info("Starting Multi-language Voice Typer...")
-        self.root = tk.Tk()
-        self.badge = FloatingBadge(self.root)
+        logging.info("Starting Voice Typer Pro...")
+        self.root = ctk.CTk()
+        self.badge = ModernFloatingPill(self.root)
         self.recognizer = sr.Recognizer()
         
         self.is_recording = False
@@ -270,16 +263,14 @@ class VoiceTyperApp:
     def on_settings_saved(self, new_settings):
         global SETTINGS
         SETTINGS = new_settings
-        self.badge.apply_theme()
         msg = self._t("saved_msg")
-        self.update_badge("⚙️", msg, "#a6e3a1", 2500)
+        self.update_badge("#22c55e", msg, 2500)
 
     def on_minimized(self):
-        self.badge.apply_theme()
-        self.update_badge("🎙️", "Voice Typer Active (F8)", "#89b4fa", 3000)
+        self.update_badge("#3b82f6", "Voice Typer Pro Active (F8)", 3000)
 
-    def update_badge(self, icon, text, fg=None, auto_hide=None):
-        self.root.after(0, lambda: self.badge.show(icon, text, fg, auto_hide))
+    def update_badge(self, dot_color, text, auto_hide=None):
+        self.root.after(0, lambda: self.badge.show(dot_color, text, auto_hide))
 
     def set_tray_icon(self, img):
         if self.tray_icon:
@@ -334,7 +325,8 @@ class VoiceTyperApp:
         else:
             mode_hint = self._t("hint_toggle")
 
-        self.update_badge("🎙️", mode_hint, "#89b4fa")
+        # Red pulsing dot for recording
+        self.update_badge("#ef4444", mode_hint)
 
         frames = []
         chunk_duration = 0.1
@@ -376,17 +368,18 @@ class VoiceTyperApp:
         except Exception as e:
             play_sound("error")
             logging.error(f"Mic error: {e}")
-            self.update_badge("❌", f"Mic: {str(e)[:25]}", "#f38ba8", 3000)
+            self.update_badge("#ef4444", f"Mic: {str(e)[:25]}", 3000)
             self.set_tray_icon(ICON_IDLE)
             self.is_recording = False
             return
 
         play_sound("stop")
         self.set_tray_icon(ICON_IDLE)
-        self.update_badge("⏳", self._t("transcribing"), "#f9e2af")
+        # Amber dot for transcribing
+        self.update_badge("#f59e0b", self._t("transcribing"))
 
         if not frames or not has_spoken:
-            self.update_badge("ℹ️", self._t("no_speech"), "#a6adc8", 2000)
+            self.update_badge("#64748b", self._t("no_speech"), 2000)
             self.is_recording = False
             return
 
@@ -409,23 +402,24 @@ class VoiceTyperApp:
 
             if text:
                 play_sound("success")
-                preview = text if len(text) <= 25 else text[:23] + "..."
-                self.update_badge("✅", f"{self._t('typed')}{preview}", "#a6e3a1", 2500)
+                preview = text if len(text) <= 26 else text[:24] + "..."
+                # Green dot for pasted success
+                self.update_badge("#22c55e", f"{self._t('typed')}{preview}", 2500)
 
                 if SETTINGS.get("auto_paste", True):
                     native_paste(text + " ")
             else:
-                self.update_badge("ℹ️", self._t("unclear"), "#a6adc8", 2000)
+                self.update_badge("#64748b", self._t("unclear"), 2000)
 
         except sr.UnknownValueError:
             play_sound("error")
-            self.update_badge("❓", self._t("unclear"), "#f38ba8", 2200)
+            self.update_badge("#ef4444", self._t("unclear"), 2200)
         except sr.RequestError:
             play_sound("error")
-            self.update_badge("⚠️", self._t("network_err"), "#fab387", 3000)
+            self.update_badge("#f59e0b", self._t("network_err"), 3000)
         except Exception as e:
             play_sound("error")
-            self.update_badge("❌", f"Error: {str(e)[:25]}", "#f38ba8", 2500)
+            self.update_badge("#ef4444", f"Error: {str(e)[:25]}", 2500)
         finally:
             self.is_recording = False
 
@@ -440,7 +434,7 @@ class VoiceTyperApp:
             self.root.after(0, self.root.destroy)
 
         menu = pystray.Menu(
-            pystray.MenuItem("🎙️ Voice Typer", None, enabled=False),
+            pystray.MenuItem("🎙️ Voice Typer Pro", None, enabled=False),
             pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(self._t("tray_open"), self.open_settings_ui, default=True),
@@ -452,7 +446,7 @@ class VoiceTyperApp:
         self.tray_icon = pystray.Icon(
             "bangla_voice_typer", 
             ICON_IDLE, 
-            "Voice Typer (F8)", 
+            "Voice Typer Pro (F8)", 
             menu=menu
         )
         threading.Thread(target=self.tray_icon.run, daemon=True).start()

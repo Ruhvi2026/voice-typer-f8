@@ -1,6 +1,7 @@
 {
   "mode": "auto_stop",
   "language": "bn-IN",
+  "theme": "dark",
   "sound_effects": true,
   "floating_badge": true,
   "silence_seconds": 3.0,

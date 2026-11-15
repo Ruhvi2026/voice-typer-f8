@@ -1,13 +1,15 @@
 """
-Bangla Voice Typer - Settings & Control Center
-Supports 125+ Languages, Dynamic UI Translation, and Dark/Light Themes
+Voice Typer Pro - Professional Modern Control Center
+Built with CustomTkinter for sleek macOS / Windows 11 Fluent aesthetic.
+Supports 125+ Global Languages, Dynamic i18n, and Dark/Light Modes.
 Author: Ruhvi2026 (Project Ruhvi)
 """
 
 import os
 import json
 import tkinter as tk
-from tkinter import ttk, messagebox
+import customtkinter as ctk
+from PIL import Image
 
 from languages_data import ALL_LANGUAGES, get_ui_text
 
@@ -24,39 +26,6 @@ DEFAULT_SETTINGS = {
     "max_seconds": 45,
     "auto_paste": True,
     "hotkey": "f8"
-}
-
-THEMES = {
-    "dark": {
-        "bg": "#181825",
-        "header_bg": "#11111b",
-        "card_bg": "#1e1e2e",
-        "border": "#313244",
-        "text": "#cdd6f4",
-        "subtext": "#a6adc8",
-        "accent": "#89b4fa",
-        "success": "#a6e3a1",
-        "btn_bg": "#a6e3a1",
-        "btn_fg": "#11111b",
-        "trough": "#313244",
-        "select": "#11111b",
-        "sep": "#313244"
-    },
-    "light": {
-        "bg": "#f1f5f9",
-        "header_bg": "#ffffff",
-        "card_bg": "#ffffff",
-        "border": "#cbd5e1",
-        "text": "#0f172a",
-        "subtext": "#475569",
-        "accent": "#2563eb",
-        "success": "#16a34a",
-        "btn_bg": "#2563eb",
-        "btn_fg": "#ffffff",
-        "trough": "#e2e8f0",
-        "select": "#f8fafc",
-        "sep": "#e2e8f0"
-    }
 }
 
 def load_settings():
@@ -85,16 +54,20 @@ class SettingsUI:
         self.on_save_cb = on_save_callback
         self.on_min_cb = on_minimize_callback
 
+        # Set initial appearance mode
+        initial_theme = self.settings.get("theme", "dark")
+        ctk.set_appearance_mode(initial_theme)
+        ctk.set_default_color_theme("blue")
+
         if root:
             self.win = root
         else:
-            self.win = tk.Tk()
+            self.win = ctk.CTk()
 
-        self.win.title("🎙️ Voice Typer — কন্ট্রোল সেন্টার")
-        self.win.geometry("540x720")
+        self.win.title("Voice Typer Pro — Desktop Speech Hub")
+        self.win.geometry("560x710")
         self.win.resizable(False, False)
 
-        # Set window icon
         icon_path = os.path.join(APP_DIR, "icon.ico")
         if os.path.exists(icon_path):
             try:
@@ -102,330 +75,393 @@ class SettingsUI:
             except Exception:
                 pass
 
-        # Language maps
-        self.lang_map = {name: code for name, code in ALL_LANGUAGES}
-        self.code_to_name = {code: name for name, code in ALL_LANGUAGES}
+        # Language catalogs
+        self.all_languages = ALL_LANGUAGES
+        self.lang_map = {name: code for name, code in self.all_languages}
+        self.code_to_name = {code: name for name, code in self.all_languages}
 
-        # Active state variables
-        self.mode_var = tk.StringVar(value=self.settings.get("mode", "auto_stop"))
-        self.lang_var = tk.StringVar(value=self.settings.get("language", "bn-IN"))
-        self.theme_var = tk.StringVar(value=self.settings.get("theme", "dark"))
-        self.sound_var = tk.BooleanVar(value=self.settings.get("sound_effects", True))
-        self.badge_var = tk.BooleanVar(value=self.settings.get("floating_badge", True))
-        self.paste_var = tk.BooleanVar(value=self.settings.get("auto_paste", True))
-        self.silence_var = tk.DoubleVar(value=self.settings.get("silence_seconds", 3.2))
-
-        # Widget tracking for dynamic theme/i18n updates
-        self.themed_widgets = {}
+        # Active settings state
+        self.current_mode = self.settings.get("mode", "auto_stop")
+        self.current_lang = self.settings.get("language", "bn-IN")
+        self.current_theme = initial_theme
+        self.silence_val = self.settings.get("silence_seconds", 3.2)
 
         self._build_ui()
-        self._apply_theme()
         self._refresh_i18n()
         self.win.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _t(self, key):
-        return get_ui_text(self.lang_var.get(), key)
+        return get_ui_text(self.current_lang, key)
 
     def _build_ui(self):
-        # Header banner
-        self.header = tk.Frame(self.win, padx=24, pady=16)
-        self.header.pack(fill="x")
+        # Main container with padding
+        self.main_container = ctk.CTkFrame(self.win, corner_radius=0, fg_color=("gray95", "#0f172a"))
+        self.main_container.pack(fill="both", expand=True)
 
-        self.title_lbl = tk.Label(self.header, text=self._t("app_title"), font=("Segoe UI", 16, "bold"))
-        self.title_lbl.pack(anchor="w")
+        # --- 1. Top Header Bar ---
+        header_frame = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
+        header_frame.pack(fill="x", padx=16, pady=(16, 10))
 
-        self.sub_lbl = tk.Label(self.header, text=self._t("subtitle"), font=("Segoe UI", 9))
-        self.sub_lbl.pack(anchor="w", pady=(2, 0))
+        header_inner = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_inner.pack(fill="x", padx=16, pady=12)
 
-        # Main content
-        self.content = tk.Frame(self.win, padx=24, pady=14)
-        self.content.pack(fill="both", expand=True)
+        # Branding
+        brand_left = ctk.CTkFrame(header_inner, fg_color="transparent")
+        brand_left.pack(side="left")
 
-        # --- Section 1: Modes ---
-        self.sec_modes = tk.LabelFrame(
-            self.content, 
-            text=self._t("sec_mode"), 
-            font=("Segoe UI", 10, "bold"), 
-            padx=14, 
-            pady=10,
-            highlightthickness=1
+        title_row = ctk.CTkFrame(brand_left, fg_color="transparent")
+        title_row.pack(anchor="w")
+
+        self.title_label = ctk.CTkLabel(
+            title_row,
+            text=self._t("app_title"),
+            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold")
         )
-        self.sec_modes.pack(fill="x", pady=(0, 12))
+        self.title_label.pack(side="left", padx=(0, 8))
 
-        # Mode 1: Auto-Stop
-        self.rb1 = tk.Radiobutton(
-            self.sec_modes,
-            text=self._t("mode_auto"),
-            value="auto_stop",
-            variable=self.mode_var,
-            font=("Segoe UI", 10, "bold")
+        # Version Pill
+        ver_pill = ctk.CTkLabel(
+            title_row,
+            text="v2.0 PRO",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            fg_color=("#e2e8f0", "#334155"),
+            text_color=("#475569", "#94a3b8"),
+            corner_radius=6,
+            padx=6,
+            pady=2
         )
-        self.rb1.pack(anchor="w")
+        ver_pill.pack(side="left")
 
-        self.desc1 = tk.Label(
-            self.sec_modes,
-            text="   " + self._t("mode_auto_desc"),
-            font=("Segoe UI", 8),
+        self.subtitle_label = ctk.CTkLabel(
+            brand_left,
+            text=self._t("subtitle"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=("gray50", "gray60")
+        )
+        self.subtitle_label.pack(anchor="w", pady=(2, 0))
+
+        # Theme Selector Segmented
+        self.theme_seg = ctk.CTkSegmentedButton(
+            header_inner,
+            values=["🌙 Dark", "☀️ Light"],
+            command=self._on_theme_toggle,
+            width=140,
+            corner_radius=8
+        )
+        self.theme_seg.set("🌙 Dark" if self.current_theme == "dark" else "☀️ Light")
+        self.theme_seg.pack(side="right")
+
+        # --- 2. Card: Recording Mode ---
+        self.mode_card = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
+        self.mode_card.pack(fill="x", padx=16, pady=6)
+
+        mode_inner = ctk.CTkFrame(self.mode_card, fg_color="transparent")
+        mode_inner.pack(fill="x", padx=16, pady=12)
+
+        self.mode_header_lbl = ctk.CTkLabel(
+            mode_inner,
+            text=self._t("sec_mode"),
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=("#2563eb", "#60a5fa")
+        )
+        self.mode_header_lbl.pack(anchor="w", pady=(0, 8))
+
+        # Modern Segmented Mode Button
+        self.mode_segment = ctk.CTkSegmentedButton(
+            mode_inner,
+            values=["⚡ Auto-Stop", "🎙️ Push-to-Talk", "🔄 Toggle"],
+            command=self._on_mode_segment_changed,
+            corner_radius=8,
+            height=34
+        )
+        # Map internal mode to label
+        seg_init = {
+            "auto_stop": "⚡ Auto-Stop",
+            "push_to_talk": "🎙️ Push-to-Talk",
+            "toggle": "🔄 Toggle"
+        }.get(self.current_mode, "⚡ Auto-Stop")
+        self.mode_segment.set(seg_init)
+        self.mode_segment.pack(fill="x", pady=(0, 10))
+
+        # Interactive Mode Explanation Banner
+        self.mode_info_box = ctk.CTkFrame(mode_inner, corner_radius=8, fg_color=("gray92", "#0f172a"))
+        self.mode_info_box.pack(fill="x", pady=(0, 6))
+
+        self.mode_desc_lbl = ctk.CTkLabel(
+            self.mode_info_box,
+            text="",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
             justify="left",
-            wraplength=460
+            wraplength=480
         )
-        self.desc1.pack(anchor="w", pady=(0, 4))
+        self.mode_desc_lbl.pack(anchor="w", padx=12, pady=8)
 
-        # Silence slider
-        self.silence_frame = tk.Frame(self.sec_modes, padx=16)
-        self.silence_frame.pack(fill="x", pady=(0, 6))
+        # Silence Slider (visible in auto_stop)
+        self.slider_container = ctk.CTkFrame(mode_inner, fg_color="transparent")
+        self.slider_container.pack(fill="x", pady=(4, 0))
 
-        self.lbl_silence = tk.Label(self.silence_frame, text=self._t("silence_lbl"), font=("Segoe UI", 8, "italic"))
-        self.lbl_silence.pack(side="left")
-
-        self.slider = tk.Scale(
-            self.silence_frame, 
-            from_=2.0, 
-            to=5.5, 
-            resolution=0.2, 
-            orient="horizontal", 
-            variable=self.silence_var,
-            highlightthickness=0,
-            length=140
+        self.silence_label = ctk.CTkLabel(
+            self.slider_container,
+            text=f"{self._t('silence_lbl')} {self.silence_val} {self._t('sec_unit')}",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold")
         )
-        self.slider.pack(side="left", padx=8)
+        self.silence_label.pack(side="left")
 
-        self.lbl_sec = tk.Label(self.silence_frame, text=self._t("sec_unit"), font=("Segoe UI", 8))
-        self.lbl_sec.pack(side="left")
-
-        self.sep1 = tk.Frame(self.sec_modes, height=1)
-        self.sep1.pack(fill="x", pady=5)
-
-        # Mode 2: Push-to-Talk
-        self.rb2 = tk.Radiobutton(
-            self.sec_modes,
-            text=self._t("mode_ptt"),
-            value="push_to_talk",
-            variable=self.mode_var,
-            font=("Segoe UI", 10, "bold")
+        self.silence_slider = ctk.CTkSlider(
+            self.slider_container,
+            from_=2.0,
+            to=5.5,
+            number_of_steps=18,
+            command=self._on_slider_change,
+            width=220
         )
-        self.rb2.pack(anchor="w")
+        self.silence_slider.set(self.silence_val)
+        self.silence_slider.pack(side="right")
 
-        self.desc2 = tk.Label(
-            self.sec_modes,
-            text="   " + self._t("mode_ptt_desc"),
-            font=("Segoe UI", 8),
-            justify="left",
-            wraplength=460
+        # --- 3. Card: Speech Language (125+ Languages) ---
+        self.lang_card = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
+        self.lang_card.pack(fill="x", padx=16, pady=6)
+
+        lang_inner = ctk.CTkFrame(self.lang_card, fg_color="transparent")
+        lang_inner.pack(fill="x", padx=16, pady=12)
+
+        self.lang_header_lbl = ctk.CTkLabel(
+            lang_inner,
+            text=self._t("sec_pref"),
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=("#2563eb", "#60a5fa")
         )
-        self.desc2.pack(anchor="w", pady=(0, 6))
+        self.lang_header_lbl.pack(anchor="w", pady=(0, 6))
 
-        self.sep2 = tk.Frame(self.sec_modes, height=1)
-        self.sep2.pack(fill="x", pady=5)
+        # Search / Filter Bar + OptionMenu
+        lang_select_row = ctk.CTkFrame(lang_inner, fg_color="transparent")
+        lang_select_row.pack(fill="x", pady=(0, 8))
 
-        # Mode 3: Toggle
-        self.rb3 = tk.Radiobutton(
-            self.sec_modes,
-            text=self._t("mode_toggle"),
-            value="toggle",
-            variable=self.mode_var,
-            font=("Segoe UI", 10, "bold")
+        self.lang_search_entry = ctk.CTkEntry(
+            lang_select_row,
+            placeholder_text=self._t("search_placeholder"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            height=32,
+            width=210
         )
-        self.rb3.pack(anchor="w")
+        self.lang_search_entry.pack(side="left", padx=(0, 8))
+        self.lang_search_entry.bind("<KeyRelease>", self._filter_languages)
 
-        self.desc3 = tk.Label(
-            self.sec_modes,
-            text="   " + self._t("mode_toggle_desc"),
-            font=("Segoe UI", 8),
-            justify="left",
-            wraplength=460
+        current_lang_display = self.code_to_name.get(self.current_lang, self.all_languages[0][0])
+        self.lang_dropdown = ctk.CTkOptionMenu(
+            lang_select_row,
+            values=[name for name, _ in self.all_languages[:35]],
+            command=self._on_dropdown_selected,
+            height=32,
+            dynamic_resizing=False,
+            width=270
         )
-        self.desc3.pack(anchor="w", pady=(0, 4))
+        self.lang_dropdown.set(current_lang_display)
+        self.lang_dropdown.pack(side="right", fill="x", expand=True)
 
-        # --- Section 2: Language, Theme & Options ---
-        self.sec_opt = tk.LabelFrame(
-            self.content, 
-            text=self._t("sec_pref"), 
-            font=("Segoe UI", 10, "bold"), 
-            padx=14, 
-            pady=10,
-            highlightthickness=1
+        # Quick Select Chips
+        chips_frame = ctk.CTkFrame(lang_inner, fg_color="transparent")
+        chips_frame.pack(fill="x")
+
+        self.quick_lbl = ctk.CTkLabel(
+            chips_frame,
+            text=self._t("quick_label"),
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color=("gray50", "gray60")
         )
-        self.sec_opt.pack(fill="x", pady=(0, 10))
+        self.quick_lbl.pack(side="left", padx=(0, 6))
 
-        # Language Row
-        lang_row = tk.Frame(self.sec_opt)
-        lang_row.pack(fill="x", pady=(0, 8))
-        self.lang_row = lang_row
+        quick_presets = [
+            ("বাংলা (ভারত)", "bn-IN"),
+            ("বাংলা (BD)", "bn-BD"),
+            ("English", "en-IN"),
+            ("हिन्दी", "hi-IN"),
+            ("Español", "es-ES"),
+            ("Français", "fr-FR")
+        ]
+        for label, code in quick_presets:
+            btn = ctk.CTkButton(
+                chips_frame,
+                text=label,
+                font=ctk.CTkFont(family="Segoe UI", size=10),
+                fg_color=("gray85", "#334155"),
+                text_color=("gray10", "#f8fafc"),
+                hover_color=("#2563eb", "#3b82f6"),
+                height=22,
+                width=55,
+                corner_radius=6,
+                command=lambda c=code: self._select_language_code(c)
+            )
+            btn.pack(side="left", padx=2)
 
-        self.lbl_lang = tk.Label(lang_row, text=self._t("lang_lbl"), font=("Segoe UI", 9, "bold"))
-        self.lbl_lang.pack(side="left")
+        # --- 4. Card: Switches (Preferences) ---
+        self.pref_card = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
+        self.pref_card.pack(fill="x", padx=16, pady=6)
 
-        current_name = self.code_to_name.get(self.lang_var.get(), ALL_LANGUAGES[0][0])
-        self.combo_var = tk.StringVar(value=current_name)
+        pref_inner = ctk.CTkFrame(self.pref_card, fg_color="transparent")
+        pref_inner.pack(fill="x", padx=16, pady=10)
 
-        self.combo = ttk.Combobox(
-            lang_row,
-            textvariable=self.combo_var,
-            values=[name for name, _ in ALL_LANGUAGES],
-            state="readonly",
-            width=28
+        self.sound_switch = ctk.CTkSwitch(
+            pref_inner,
+            text=self._t("sound_cb"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            onvalue=True,
+            offvalue=False,
+            command=self._apply_data
         )
-        self.combo.pack(side="right")
-        self.combo.bind("<<ComboboxSelected>>", self._on_language_changed)
+        if self.settings.get("sound_effects", True):
+            self.sound_switch.select()
+        else:
+            self.sound_switch.deselect()
+        self.sound_switch.pack(anchor="w", pady=2)
 
-        # Theme Row (Dark / Light Switcher)
-        theme_row = tk.Frame(self.sec_opt)
-        theme_row.pack(fill="x", pady=(0, 8))
-        self.theme_row = theme_row
-
-        self.lbl_theme = tk.Label(theme_row, text=self._t("theme_lbl"), font=("Segoe UI", 9, "bold"))
-        self.lbl_theme.pack(side="left")
-
-        theme_btn_box = tk.Frame(theme_row)
-        theme_btn_box.pack(side="right")
-        self.theme_btn_box = theme_btn_box
-
-        self.rb_dark = tk.Radiobutton(
-            theme_btn_box,
-            text=self._t("theme_dark"),
-            value="dark",
-            variable=self.theme_var,
-            font=("Segoe UI", 9),
-            command=self._apply_theme
+        self.badge_switch = ctk.CTkSwitch(
+            pref_inner,
+            text=self._t("badge_cb"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            onvalue=True,
+            offvalue=False,
+            command=self._apply_data
         )
-        self.rb_dark.pack(side="left", padx=(0, 8))
+        if self.settings.get("floating_badge", True):
+            self.badge_switch.select()
+        else:
+            self.badge_switch.deselect()
+        self.badge_switch.pack(anchor="w", pady=2)
 
-        self.rb_light = tk.Radiobutton(
-            theme_btn_box,
-            text=self._t("theme_light"),
-            value="light",
-            variable=self.theme_var,
-            font=("Segoe UI", 9),
-            command=self._apply_theme
+        self.paste_switch = ctk.CTkSwitch(
+            pref_inner,
+            text=self._t("paste_cb"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            onvalue=True,
+            offvalue=False,
+            command=self._apply_data
         )
-        self.rb_light.pack(side="left")
+        if self.settings.get("auto_paste", True):
+            self.paste_switch.select()
+        else:
+            self.paste_switch.deselect()
+        self.paste_switch.pack(anchor="w", pady=2)
 
-        # Sound & Badge Checkboxes
-        self.cb_sound = tk.Checkbutton(
-            self.sec_opt, 
-            text=self._t("sound_cb"), 
-            variable=self.sound_var, 
-            font=("Segoe UI", 9)
+        # --- 5. Bottom Action & Status Footer ---
+        footer_frame = ctk.CTkFrame(self.main_container, corner_radius=12, fg_color=("white", "#1e293b"))
+        footer_frame.pack(fill="x", padx=16, pady=(6, 16))
+
+        footer_inner = ctk.CTkFrame(footer_frame, fg_color="transparent")
+        footer_inner.pack(fill="x", padx=16, pady=12)
+
+        # Status indicator
+        status_box = ctk.CTkFrame(footer_inner, fg_color="transparent")
+        status_box.pack(side="left")
+
+        self.status_lbl = ctk.CTkLabel(
+            status_box,
+            text=self._t("status_ready"),
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=("#16a34a", "#4ade80")
         )
-        self.cb_sound.pack(anchor="w", pady=(0, 2))
+        self.status_lbl.pack(anchor="w")
 
-        self.cb_badge = tk.Checkbutton(
-            self.sec_opt, 
-            text=self._t("badge_cb"), 
-            variable=self.badge_var, 
-            font=("Segoe UI", 9)
+        credit_lbl = ctk.CTkLabel(
+            status_box,
+            text="Developed by Ruhvi2026 • Project Ruhvi",
+            font=ctk.CTkFont(family="Segoe UI", size=9),
+            text_color=("gray50", "gray55")
         )
-        self.cb_badge.pack(anchor="w")
+        credit_lbl.pack(anchor="w")
 
-        # --- Bottom Action Bar ---
-        self.btn_frame = tk.Frame(self.win, padx=24, pady=14)
-        self.btn_frame.pack(fill="x", side="bottom")
-
-        self.btn_start = tk.Button(
-            self.btn_frame, 
-            text=self._t("start_btn"), 
-            font=("Segoe UI", 10, "bold"), 
-            relief="flat", 
-            padx=18, 
-            pady=7,
+        # Primary Launch Button
+        self.btn_start = ctk.CTkButton(
+            footer_inner,
+            text=self._t("start_btn"),
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color=("#22c55e", "#16a34a"),
+            hover_color=("#16a34a", "#15803d"),
+            height=38,
+            corner_radius=8,
             command=self._start_and_minimize
         )
         self.btn_start.pack(side="right")
 
-        self.credit_lbl = tk.Label(
-            self.btn_frame, 
-            text="by Ruhvi2026 • F8", 
-            font=("Segoe UI", 8)
-        )
-        self.credit_lbl.pack(side="left")
+    def _on_theme_toggle(self, selected):
+        theme = "dark" if "Dark" in selected else "light"
+        self.current_theme = theme
+        ctk.set_appearance_mode(theme)
+        self._apply_data()
 
-    def _on_language_changed(self, event=None):
-        selected_name = self.combo_var.get()
+    def _on_mode_segment_changed(self, selected):
+        if "Auto" in selected:
+            self.current_mode = "auto_stop"
+        elif "Push" in selected:
+            self.current_mode = "push_to_talk"
+        else:
+            self.current_mode = "toggle"
+
+        self._refresh_mode_description()
+        self._apply_data()
+
+    def _refresh_mode_description(self):
+        if self.current_mode == "auto_stop":
+            desc = self._t("mode_auto_desc")
+            self.slider_container.pack(fill="x", pady=(4, 0))
+        elif self.current_mode == "push_to_talk":
+            desc = self._t("mode_ptt_desc")
+            self.slider_container.pack_forget()
+        else:
+            desc = self._t("mode_toggle_desc")
+            self.slider_container.pack_forget()
+        self.mode_desc_lbl.configure(text=desc)
+
+    def _on_slider_change(self, val):
+        self.silence_val = round(float(val), 1)
+        self.silence_label.configure(text=f"{self._t('silence_lbl')} {self.silence_val} {self._t('sec_unit')}")
+        self._apply_data()
+
+    def _on_dropdown_selected(self, selected_name):
         code = self.lang_map.get(selected_name, "bn-IN")
-        self.lang_var.set(code)
-        # Dynamically refresh all UI strings to match selected language!
+        self._select_language_code(code)
+
+    def _select_language_code(self, code):
+        self.current_lang = code
+        display_name = self.code_to_name.get(code, code)
+        self.lang_dropdown.set(display_name)
         self._refresh_i18n()
+        self._apply_data()
+
+    def _filter_languages(self, event=None):
+        query = self.lang_search_entry.get().strip().lower()
+        if not query:
+            filtered = [name for name, _ in self.all_languages[:40]]
+        else:
+            filtered = [name for name, code in self.all_languages if query in name.lower() or query in code.lower()]
+            if not filtered:
+                filtered = [self.code_to_name.get(self.current_lang, "No match")]
+        self.lang_dropdown.configure(values=filtered[:50])
 
     def _refresh_i18n(self):
-        """Refreshes all on-screen text to match the active language."""
-        self.title_lbl.config(text=self._t("app_title"))
-        self.sub_lbl.config(text=self._t("subtitle"))
-        self.sec_modes.config(text=self._t("sec_mode"))
-        self.rb1.config(text=self._t("mode_auto"))
-        self.desc1.config(text="   " + self._t("mode_auto_desc"))
-        self.lbl_silence.config(text=self._t("silence_lbl"))
-        self.lbl_sec.config(text=self._t("sec_unit"))
-        self.rb2.config(text=self._t("mode_ptt"))
-        self.desc2.config(text="   " + self._t("mode_ptt_desc"))
-        self.rb3.config(text=self._t("mode_toggle"))
-        self.desc3.config(text="   " + self._t("mode_toggle_desc"))
-        self.sec_opt.config(text=self._t("sec_pref"))
-        self.lbl_lang.config(text=self._t("lang_lbl"))
-        self.lbl_theme.config(text=self._t("theme_lbl"))
-        self.rb_dark.config(text=self._t("theme_dark"))
-        self.rb_light.config(text=self._t("theme_light"))
-        self.cb_sound.config(text=self._t("sound_cb"))
-        self.cb_badge.config(text=self._t("badge_cb"))
-        self.btn_start.config(text=self._t("start_btn"))
-
-    def _apply_theme(self):
-        """Applies active Dark or Light theme palette across all components."""
-        theme_key = self.theme_var.get()
-        c = THEMES.get(theme_key, THEMES["dark"])
-
-        self.win.configure(bg=c["bg"])
-        self.header.configure(bg=c["header_bg"])
-        self.title_lbl.configure(bg=c["header_bg"], fg=c["text"])
-        self.sub_lbl.configure(bg=c["header_bg"], fg=c["subtext"])
-
-        self.content.configure(bg=c["bg"])
-
-        # Section 1
-        self.sec_modes.configure(bg=c["bg"], fg=c["accent"], highlightbackground=c["border"])
-        self.rb1.configure(bg=c["bg"], fg=c["success"], selectcolor=c["select"], activebackground=c["bg"])
-        self.desc1.configure(bg=c["bg"], fg=c["text"])
-        self.silence_frame.configure(bg=c["bg"])
-        self.lbl_silence.configure(bg=c["bg"], fg=c["subtext"])
-        self.slider.configure(bg=c["bg"], fg=c["success"], troughcolor=c["trough"])
-        self.lbl_sec.configure(bg=c["bg"], fg=c["subtext"])
-        self.sep1.configure(bg=c["sep"])
-
-        self.rb2.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-        self.desc2.configure(bg=c["bg"], fg=c["subtext"])
-        self.sep2.configure(bg=c["sep"])
-
-        self.rb3.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-        self.desc3.configure(bg=c["bg"], fg=c["subtext"])
-
-        # Section 2
-        self.sec_opt.configure(bg=c["bg"], fg=c["accent"], highlightbackground=c["border"])
-        self.lang_row.configure(bg=c["bg"])
-        self.lbl_lang.configure(bg=c["bg"], fg=c["text"])
-
-        self.theme_row.configure(bg=c["bg"])
-        self.lbl_theme.configure(bg=c["bg"], fg=c["text"])
-        self.theme_btn_box.configure(bg=c["bg"])
-        self.rb_dark.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-        self.rb_light.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-
-        self.cb_sound.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-        self.cb_badge.configure(bg=c["bg"], fg=c["text"], selectcolor=c["select"], activebackground=c["bg"])
-
-        # Footer
-        self.btn_frame.configure(bg=c["header_bg"])
-        self.btn_start.configure(bg=c["btn_bg"], fg=c["btn_fg"])
-        self.credit_lbl.configure(bg=c["header_bg"], fg=c["subtext"])
+        """Dynamically re-renders all UI strings to match selected language."""
+        self.title_label.configure(text=self._t("app_title"))
+        self.subtitle_label.configure(text=self._t("subtitle"))
+        self.mode_header_lbl.configure(text=self._t("sec_mode"))
+        self._refresh_mode_description()
+        self.silence_label.configure(text=f"{self._t('silence_lbl')} {self.silence_val} {self._t('sec_unit')}")
+        self.lang_header_lbl.configure(text=self._t("sec_pref"))
+        self.lang_search_entry.configure(placeholder_text=self._t("search_placeholder"))
+        self.quick_lbl.configure(text=self._t("quick_label"))
+        self.sound_switch.configure(text=self._t("sound_cb"))
+        self.badge_switch.configure(text=self._t("badge_cb"))
+        self.paste_switch.configure(text=self._t("paste_cb"))
+        self.status_lbl.configure(text=self._t("status_ready"))
+        self.btn_start.configure(text=self._t("start_btn"))
 
     def _apply_data(self):
-        new_lang_code = self.lang_map.get(self.combo_var.get(), "bn-IN")
-        self.settings["mode"] = self.mode_var.get()
-        self.settings["language"] = new_lang_code
-        self.settings["theme"] = self.theme_var.get()
-        self.settings["sound_effects"] = self.sound_var.get()
-        self.settings["floating_badge"] = self.badge_var.get()
-        self.settings["auto_paste"] = self.paste_var.get()
-        self.settings["silence_seconds"] = round(float(self.silence_var.get()), 1)
+        self.settings["mode"] = self.current_mode
+        self.settings["language"] = self.current_lang
+        self.settings["theme"] = self.current_theme
+        self.settings["sound_effects"] = bool(self.sound_switch.get())
+        self.settings["floating_badge"] = bool(self.badge_switch.get())
+        self.settings["auto_paste"] = bool(self.paste_switch.get())
+        self.settings["silence_seconds"] = self.silence_val
         save_settings(self.settings)
         if self.on_save_cb:
             self.on_save_cb(self.settings)
@@ -444,14 +480,20 @@ class SettingsUI:
 
     def show(self):
         self.settings = load_settings()
-        self.mode_var.set(self.settings.get("mode", "auto_stop"))
-        self.lang_var.set(self.settings.get("language", "bn-IN"))
-        self.theme_var.set(self.settings.get("theme", "dark"))
-        self.combo_var.set(self.code_to_name.get(self.settings.get("language", "bn-IN"), ALL_LANGUAGES[0][0]))
-        self.silence_var.set(self.settings.get("silence_seconds", 3.2))
-        self.sound_var.set(self.settings.get("sound_effects", True))
-        self.badge_var.set(self.settings.get("floating_badge", True))
-        self._apply_theme()
+        self.current_mode = self.settings.get("mode", "auto_stop")
+        self.current_lang = self.settings.get("language", "bn-IN")
+        self.current_theme = self.settings.get("theme", "dark")
+        self.silence_val = self.settings.get("silence_seconds", 3.2)
+        ctk.set_appearance_mode(self.current_theme)
+        self.theme_seg.set("🌙 Dark" if self.current_theme == "dark" else "☀️ Light")
+        seg_init = {
+            "auto_stop": "⚡ Auto-Stop",
+            "push_to_talk": "🎙️ Push-to-Talk",
+            "toggle": "🔄 Toggle"
+        }.get(self.current_mode, "⚡ Auto-Stop")
+        self.mode_segment.set(seg_init)
+        self.lang_dropdown.set(self.code_to_name.get(self.current_lang, self.all_languages[0][0]))
+        self.silence_slider.set(self.silence_val)
         self._refresh_i18n()
         self.win.deiconify()
         self.win.lift()
