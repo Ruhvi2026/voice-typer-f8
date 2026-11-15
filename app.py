@@ -76,10 +76,17 @@ def check_single_instance():
             user32.SetForegroundWindow(hwnd)
         sys.exit(0)
 
-def native_paste(text):
+def native_paste(text, target_hwnd=None):
     """Pastes text directly at the active cursor and restores previous clipboard."""
     if not text:
         return
+    if target_hwnd and user32.IsWindow(target_hwnd):
+        try:
+            user32.SetForegroundWindow(target_hwnd)
+            time.sleep(0.05)
+        except Exception:
+            pass
+
     old_clipboard = ""
     try:
         old_clipboard = pyperclip.paste()
@@ -204,6 +211,199 @@ class ModernFloatingPill:
         self.win.withdraw()
 
 
+class FloatingMicWidget:
+    """
+    Always-on-top, draggable, click-to-talk floating mic widget for Windows.
+    Applies WS_EX_NOACTIVATE so clicking it NEVER steals focus from active text box!
+    Supports Auto-Stop, Push-to-Talk, and Toggle modes.
+    """
+    def __init__(self, parent_root, on_press_callback, on_release_callback=None, on_open_settings=None):
+        self.root = parent_root
+        self.on_press = on_press_callback
+        self.on_release = on_release_callback
+        self.on_open_settings = on_open_settings
+
+        self.win = ctk.CTkToplevel(parent_root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.attributes("-alpha", 0.96)
+
+        # Apply WS_EX_NOACTIVATE style so clicking NEVER steals text focus
+        self._apply_no_activate()
+
+        # Modern floating pill styling
+        self.card = ctk.CTkFrame(
+            self.win,
+            corner_radius=20,
+            border_width=2,
+            border_color="#38bdf8",
+            fg_color="#0f172a"
+        )
+        self.card.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # Mic Icon
+        self.icon_label = ctk.CTkLabel(
+            self.card,
+            text="🎙️",
+            font=ctk.CTkFont(family="Segoe UI Emoji", size=15),
+            text_color="#38bdf8"
+        )
+        self.icon_label.pack(side="left", padx=(10, 4), pady=5)
+
+        # Status text
+        self.text_label = ctk.CTkLabel(
+            self.card,
+            text="Mic (F8)",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#f8fafc"
+        )
+        self.text_label.pack(side="left", padx=(0, 12), pady=5)
+
+        # Dragging & Clicking states
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+        self.win_x = 0
+        self.win_y = 0
+        self.moved = False
+        self.target_hwnd = None
+        self._reset_timer = None
+
+        # Bind mouse events to all widgets in the card
+        for widget in (self.win, self.card, self.icon_label, self.text_label):
+            widget.bind("<ButtonPress-1>", self._on_mouse_down)
+            widget.bind("<B1-Motion>", self._on_mouse_drag)
+            widget.bind("<ButtonRelease-1>", self._on_mouse_up)
+            widget.bind("<Button-3>", self._on_right_click)
+            widget.bind("<Enter>", self._on_hover_enter)
+            widget.bind("<Leave>", self._on_hover_leave)
+
+        # Load position or default to top-right
+        self._set_initial_position()
+
+        if not SETTINGS.get("floating_mic", True):
+            self.win.withdraw()
+        else:
+            self.win.deiconify()
+
+    def _apply_no_activate(self):
+        try:
+            self.win.update_idletasks()
+            hwnd = user32.GetParent(self.win.winfo_id())
+            if not hwnd:
+                hwnd = self.win.winfo_id()
+            GWL_EXSTYLE = -20
+            WS_EX_NOACTIVATE = 0x08000000
+            WS_EX_TOPMOST = 0x00000008
+            cur = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, cur | WS_EX_NOACTIVATE | WS_EX_TOPMOST)
+        except Exception as e:
+            logging.debug(f"Failed to apply WS_EX_NOACTIVATE: {e}")
+
+    def _set_initial_position(self):
+        sw = self.win.winfo_screenwidth()
+        saved_x = SETTINGS.get("floating_mic_x", -1)
+        saved_y = SETTINGS.get("floating_mic_y", -1)
+        if saved_x > 0 and saved_y > 0 and saved_x < (sw - 50):
+            x, y = saved_x, saved_y
+        else:
+            x = sw - 145
+            y = 75
+        self.win.geometry(f"124x42+{x}+{y}")
+
+    def _on_mouse_down(self, event):
+        self.drag_start_x = event.x_root
+        self.drag_start_y = event.y_root
+        self.win_x = self.win.winfo_x()
+        self.win_y = self.win.winfo_y()
+        self.moved = False
+        self.target_hwnd = user32.GetForegroundWindow()
+
+        mode = SETTINGS.get("mode", "auto_stop")
+        if mode == "push_to_talk":
+            if self.on_press:
+                self.on_press(source="floating_mic_mouse_down")
+
+    def _on_mouse_drag(self, event):
+        dx = event.x_root - self.drag_start_x
+        dy = event.y_root - self.drag_start_y
+        if abs(dx) > 4 or abs(dy) > 4:
+            self.moved = True
+            new_x = self.win_x + dx
+            new_y = self.win_y + dy
+            self.win.geometry(f"+{new_x}+{new_y}")
+
+    def _on_mouse_up(self, event):
+        if self.moved:
+            SETTINGS["floating_mic_x"] = self.win.winfo_x()
+            SETTINGS["floating_mic_y"] = self.win.winfo_y()
+            save_settings(SETTINGS)
+            return
+
+        mode = SETTINGS.get("mode", "auto_stop")
+        if mode == "push_to_talk":
+            if self.on_release:
+                self.on_release()
+        else:
+            if self.on_press:
+                self.on_press(source="floating_mic_click")
+
+    def _on_hover_enter(self, event=None):
+        if self.card.cget("border_color") == "#38bdf8":
+            self.card.configure(border_color="#2563eb")
+
+    def _on_hover_leave(self, event=None):
+        if self.card.cget("border_color") == "#2563eb":
+            self.card.configure(border_color="#38bdf8")
+
+    def _on_right_click(self, event):
+        import tkinter as tk
+        menu = tk.Menu(self.win, tearoff=0)
+        menu.add_command(label="⚙️ Settings (কন্ট্রোল সেন্টার)", command=self.on_open_settings)
+        menu.add_separator()
+        menu.add_command(label="❌ Hide Floating Mic (লুকান)", command=self.hide)
+        menu.post(event.x_root, event.y_root)
+
+    def set_state(self, state, text=None):
+        def _update():
+            if self._reset_timer:
+                self.win.after_cancel(self._reset_timer)
+                self._reset_timer = None
+
+            if state == "idle":
+                self.card.configure(fg_color="#0f172a", border_color="#38bdf8")
+                self.icon_label.configure(text="🎙️", text_color="#38bdf8")
+                self.text_label.configure(text=text or "Mic (F8)", text_color="#f8fafc")
+            elif state == "recording":
+                self.card.configure(fg_color="#450a0a", border_color="#ef4444")
+                self.icon_label.configure(text="🔴", text_color="#ef4444")
+                self.text_label.configure(text=text or "Listening...", text_color="#fecaca")
+            elif state == "transcribing":
+                self.card.configure(fg_color="#451a03", border_color="#f59e0b")
+                self.icon_label.configure(text="⏳", text_color="#f59e0b")
+                self.text_label.configure(text=text or "Converting...", text_color="#fef3c7")
+            elif state == "success":
+                self.card.configure(fg_color="#052e16", border_color="#22c55e")
+                self.icon_label.configure(text="✓", text_color="#22c55e")
+                self.text_label.configure(text=text or "Typed!", text_color="#bbf7d0")
+                self._reset_timer = self.win.after(1600, lambda: self.set_state("idle"))
+            elif state == "error":
+                self.card.configure(fg_color="#450a0a", border_color="#ef4444")
+                self.icon_label.configure(text="⚠️", text_color="#ef4444")
+                self.text_label.configure(text=text or "Error", text_color="#fecaca")
+                self._reset_timer = self.win.after(2000, lambda: self.set_state("idle"))
+
+        self.root.after(0, _update)
+
+    def show(self):
+        self.win.deiconify()
+        self.win.lift()
+
+    def hide(self):
+        self.win.withdraw()
+        SETTINGS["floating_mic"] = False
+        save_settings(SETTINGS)
+
+
 class HardwareKeyWatcher(threading.Thread):
     """
     Direct hardware keyboard poll for F8 using GetAsyncKeyState.
@@ -296,6 +496,14 @@ class VoiceTyperApp:
             on_minimize_callback=self.on_minimized
         )
 
+        # Always-on-top draggable floating mic widget
+        self.floating_mic = FloatingMicWidget(
+            parent_root=self.root,
+            on_press_callback=self.on_f8_pressed,
+            on_release_callback=self.on_f8_released,
+            on_open_settings=self.open_settings_ui
+        )
+
         # Dual engines for 100% resilient F8 detection
         self.hotkey_engine = WindowsKernelHotkey(self.on_f8_pressed)
         self.hotkey_engine.start()
@@ -327,6 +535,10 @@ class VoiceTyperApp:
     def on_settings_saved(self, new_settings):
         global SETTINGS
         SETTINGS = new_settings
+        if new_settings.get("floating_mic", True):
+            self.floating_mic.show()
+        else:
+            self.floating_mic.hide()
         msg = self._t("saved_msg")
         self.update_badge("#22c55e", msg, 2500)
 
@@ -387,6 +599,7 @@ class VoiceTyperApp:
 
         # Red pulsing dot for recording
         self.update_badge("#ef4444", mode_hint)
+        self.floating_mic.set_state("recording", "Listening...")
 
         frames = []
         chunk_duration = 0.1
@@ -430,6 +643,7 @@ class VoiceTyperApp:
             logging.error(f"Mic error: {e}")
             self.update_badge("#ef4444", f"Mic: {str(e)[:25]}", 3000)
             self.set_tray_icon(ICON_IDLE)
+            self.floating_mic.set_state("error", "Mic Error")
             self.is_recording = False
             return
 
@@ -437,9 +651,11 @@ class VoiceTyperApp:
         self.set_tray_icon(ICON_IDLE)
         # Amber dot for transcribing
         self.update_badge("#f59e0b", self._t("transcribing"))
+        self.floating_mic.set_state("transcribing", "Converting...")
 
         if not frames or len(frames) < 3:
             self.update_badge("#64748b", self._t("no_speech"), 2000)
+            self.floating_mic.set_state("idle")
             self.is_recording = False
             return
 
@@ -465,21 +681,26 @@ class VoiceTyperApp:
                 preview = text if len(text) <= 26 else text[:24] + "..."
                 # Green dot for pasted success
                 self.update_badge("#22c55e", f"{self._t('typed')}{preview}", 2500)
+                self.floating_mic.set_state("success", "Typed!")
 
                 if SETTINGS.get("auto_paste", True):
-                    native_paste(text + " ")
+                    native_paste(text + " ", target_hwnd=self.floating_mic.target_hwnd)
             else:
                 self.update_badge("#64748b", self._t("unclear"), 2000)
+                self.floating_mic.set_state("error", "Unclear")
 
         except sr.UnknownValueError:
             play_sound("error")
             self.update_badge("#ef4444", self._t("unclear"), 2200)
+            self.floating_mic.set_state("error", "Unclear")
         except sr.RequestError:
             play_sound("error")
             self.update_badge("#f59e0b", self._t("network_err"), 3000)
+            self.floating_mic.set_state("error", "Net Error")
         except Exception as e:
             play_sound("error")
             self.update_badge("#ef4444", f"Error: {str(e)[:25]}", 2500)
+            self.floating_mic.set_state("error", "Error")
         finally:
             self.is_recording = False
 

@@ -21,6 +21,9 @@ DEFAULT_SETTINGS = {
     "theme": "dark",         # "dark" or "light"
     "sound_effects": True,
     "floating_badge": True,
+    "floating_mic": True,    # New: Clickable Floating Mic Widget
+    "floating_mic_x": -1,
+    "floating_mic_y": -1,
     "silence_seconds": 3.2,
     "max_seconds": 45,
     "auto_paste": True,
@@ -505,6 +508,20 @@ class SettingsUI:
             self.badge_switch.deselect()
         self.badge_switch.pack(anchor="w", pady=2)
 
+        self.mic_widget_switch = ctk.CTkSwitch(
+            pref_inner,
+            text=self._t("floating_mic_cb"),
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            onvalue=True,
+            offvalue=False,
+            command=self._apply_data
+        )
+        if self.settings.get("floating_mic", True):
+            self.mic_widget_switch.select()
+        else:
+            self.mic_widget_switch.deselect()
+        self.mic_widget_switch.pack(anchor="w", pady=2)
+
         self.paste_switch = ctk.CTkSwitch(
             pref_inner,
             text=self._t("paste_cb"),
@@ -623,6 +640,7 @@ class SettingsUI:
         self.quick_lbl.configure(text=self._t("quick_label"))
         self.sound_switch.configure(text=self._t("sound_cb"))
         self.badge_switch.configure(text=self._t("badge_cb"))
+        self.mic_widget_switch.configure(text=self._t("floating_mic_cb"))
         self.paste_switch.configure(text=self._t("paste_cb"))
         self.status_lbl.configure(text=self._t("status_ready"))
         self.btn_start.configure(text=self._t("start_btn"))
@@ -633,6 +651,7 @@ class SettingsUI:
         self.settings["theme"] = self.current_theme
         self.settings["sound_effects"] = bool(self.sound_switch.get())
         self.settings["floating_badge"] = bool(self.badge_switch.get())
+        self.settings["floating_mic"] = bool(self.mic_widget_switch.get())
         self.settings["auto_paste"] = bool(self.paste_switch.get())
         self.settings["silence_seconds"] = self.silence_val
         save_settings(self.settings)
@@ -667,6 +686,10 @@ class SettingsUI:
         self.mode_segment.set(seg_init)
         self.active_lang_title.configure(text=self.code_to_name.get(self.current_lang, self.current_lang))
         self.silence_slider.set(self.silence_val)
+        if self.settings.get("floating_mic", True):
+            self.mic_widget_switch.select()
+        else:
+            self.mic_widget_switch.deselect()
         self._refresh_i18n()
         self.win.deiconify()
         self.win.lift()
