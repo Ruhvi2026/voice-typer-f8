@@ -1,0 +1,15 @@
+# Pyrefly Configuration for Voice Typer F8
+python-version = "3.13"
+
+project-includes = [
+    "**/*.py",
+]
+
+project-excludes = [
+    "**/build/**",
+    "**/dist/**",
+    "**/.git/**",
+    "**/__pycache__/**",
+]
+
+type-checking-mode = "basic"
