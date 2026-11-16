@@ -254,7 +254,7 @@ class FloatingMicWidget:
             font=ctk.CTkFont(family="Segoe UI Emoji", size=15),
             text_color="#38bdf8"
         )
-        self.icon_label.pack(side="left", padx=(10, 4), pady=5)
+        self.icon_label.pack(side="left", padx=(10, 3), pady=5)
 
         # Status text
         self.text_label = ctk.CTkLabel(
@@ -263,7 +263,23 @@ class FloatingMicWidget:
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             text_color="#f8fafc"
         )
-        self.text_label.pack(side="left", padx=(0, 12), pady=5)
+        self.text_label.pack(side="left", padx=(0, 4), pady=5)
+
+        # Sleek Close (✕) button on right
+        self.close_btn = ctk.CTkLabel(
+            self.card,
+            text="✕",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color="#64748b",
+            width=20,
+            height=20,
+            corner_radius=10,
+            fg_color="transparent"
+        )
+        self.close_btn.pack(side="right", padx=(0, 6), pady=5)
+        self.close_btn.bind("<Enter>", self._on_close_hover_enter)
+        self.close_btn.bind("<Leave>", self._on_close_hover_leave)
+        self.close_btn.bind("<Button-1>", self._on_close_clicked)
 
         # Dragging & Clicking states
         self.drag_start_x = 0
@@ -312,9 +328,19 @@ class FloatingMicWidget:
         if saved_x > 0 and saved_y > 0 and saved_x < (sw - 50):
             x, y = saved_x, saved_y
         else:
-            x = sw - 145
+            x = sw - 160
             y = 75
-        self.win.geometry(f"124x42+{x}+{y}")
+        self.win.geometry(f"140x42+{x}+{y}")
+
+    def _on_close_hover_enter(self, event=None):
+        self.close_btn.configure(text_color="#ef4444", fg_color="#1e293b")
+
+    def _on_close_hover_leave(self, event=None):
+        self.close_btn.configure(text_color="#64748b", fg_color="transparent")
+
+    def _on_close_clicked(self, event=None):
+        self.hide()
+        return "break"
 
     def _on_mouse_down(self, event):
         self.drag_start_x = event.x_root
@@ -379,28 +405,35 @@ class FloatingMicWidget:
                 self.card.configure(fg_color="#0f172a", border_color="#38bdf8")
                 self.icon_label.configure(text="🎙️", text_color="#38bdf8")
                 self.text_label.configure(text=text or "Mic (F8)", text_color="#f8fafc")
+                self.close_btn.configure(text_color="#64748b")
             elif state == "recording":
                 self.card.configure(fg_color="#450a0a", border_color="#ef4444")
                 self.icon_label.configure(text="🔴", text_color="#ef4444")
                 self.text_label.configure(text=text or "Listening...", text_color="#fecaca")
+                self.close_btn.configure(text_color="#fca5a5")
             elif state == "transcribing":
                 self.card.configure(fg_color="#451a03", border_color="#f59e0b")
                 self.icon_label.configure(text="⏳", text_color="#f59e0b")
                 self.text_label.configure(text=text or "Converting...", text_color="#fef3c7")
+                self.close_btn.configure(text_color="#fde68a")
             elif state == "success":
                 self.card.configure(fg_color="#052e16", border_color="#22c55e")
                 self.icon_label.configure(text="✓", text_color="#22c55e")
                 self.text_label.configure(text=text or "Typed!", text_color="#bbf7d0")
+                self.close_btn.configure(text_color="#86efac")
                 self._reset_timer = self.win.after(1600, lambda: self.set_state("idle"))
             elif state == "error":
                 self.card.configure(fg_color="#450a0a", border_color="#ef4444")
                 self.icon_label.configure(text="⚠️", text_color="#ef4444")
                 self.text_label.configure(text=text or "Error", text_color="#fecaca")
+                self.close_btn.configure(text_color="#fca5a5")
                 self._reset_timer = self.win.after(2000, lambda: self.set_state("idle"))
 
         self.root.after(0, _update)
 
     def show(self):
+        SETTINGS["floating_mic"] = True
+        save_settings(SETTINGS)
         self.win.deiconify()
         self.win.lift()
 
@@ -711,6 +744,7 @@ class VoiceTyperApp:
             self.is_recording = False
 
     def open_settings_ui(self):
+        self.settings_ui.settings = load_settings()
         self.root.after(0, self.settings_ui.show)
 
     def init_tray(self):
@@ -721,11 +755,22 @@ class VoiceTyperApp:
             self.hardware_watcher.stop()
             self.root.after(0, self.root.destroy)
 
+        def toggle_floating_mic(icon, item):
+            current = SETTINGS.get("floating_mic", True)
+            new_val = not current
+            SETTINGS["floating_mic"] = new_val
+            save_settings(SETTINGS)
+            if new_val:
+                self.root.after(0, self.floating_mic.show)
+            else:
+                self.root.after(0, self.floating_mic.hide)
+
         menu = pystray.Menu(
             pystray.MenuItem("🎙️ Voice Typer F8", None, enabled=False),
             pystray.MenuItem("✨ Created by Ruhvi2026", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(self._t("tray_open"), self.open_settings_ui, default=True),
+            pystray.MenuItem("📌 Show Floating Mic", toggle_floating_mic, checked=lambda item: SETTINGS.get("floating_mic", True)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("⌨️ Hotkey: F8", None, enabled=False),
             pystray.MenuItem(self._t("tray_exit"), on_exit)
