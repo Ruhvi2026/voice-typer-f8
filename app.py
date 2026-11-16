@@ -3,7 +3,7 @@ Voice Typer F8 for Antigravity IDE & Windows
 ==============================================
 Author      : Ruhvi2026 (ruhvi.main@gmail.com)
 Project     : Project Ruhvi (https://github.com/Ruhvi2026)
-Repository  : https://github.com/Ruhvi2026/bangla-voice-typer
+Repository  : https://github.com/Ruhvi2026/voice-typer-f8
 Year        : 2026
 Description : World-class Desktop Speech-to-Text with CustomTkinter UI,
               125+ languages, dynamic i18n, Dark/Light modes, and native Windows Kernel Hotkey.

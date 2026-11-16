@@ -46,4 +46,4 @@
 
 **Developed with ❤️ by [Ruhvi2026](https://github.com/Ruhvi2026)**  
 *Project Ruhvi • 2026*  
-*Repository: [bangla-voice-typer](https://github.com/Ruhvi2026/bangla-voice-typer)*
+*Repository: [voice-typer-f8](https://github.com/Ruhvi2026/voice-typer-f8)*
