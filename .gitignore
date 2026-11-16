@@ -8,3 +8,7 @@ venv/
 ENV/
 *.tmp
 *.log
+build/
+dist/
+*.spec
+Voice Typer F8.exe

@@ -31,7 +31,13 @@ import pystray
 from settings_ui import SettingsUI, load_settings, save_settings
 from languages_data import get_ui_text
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+    BUNDLE_DIR = getattr(sys, '_MEIPASS', APP_DIR)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    BUNDLE_DIR = APP_DIR
+
 LOG_PATH = os.path.join(APP_DIR, "app.log")
 
 logging.basicConfig(

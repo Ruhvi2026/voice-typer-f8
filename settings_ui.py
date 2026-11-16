@@ -7,12 +7,19 @@ Author: Ruhvi2026 (Project Ruhvi)
 
 import os
 import json
+import sys
 import tkinter as tk
 import customtkinter as ctk
 
 from languages_data import ALL_LANGUAGES, get_ui_text
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+    BUNDLE_DIR = getattr(sys, '_MEIPASS', APP_DIR)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    BUNDLE_DIR = APP_DIR
+
 SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
 
 DEFAULT_SETTINGS = {
@@ -241,7 +248,9 @@ class SettingsUI:
         self.win.geometry("560x710")
         self.win.resizable(False, False)
 
-        icon_path = os.path.join(APP_DIR, "icon.ico")
+        icon_path = os.path.join(BUNDLE_DIR, "icon.ico")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(APP_DIR, "icon.ico")
         if os.path.exists(icon_path):
             try:
                 self.win.iconbitmap(icon_path)
